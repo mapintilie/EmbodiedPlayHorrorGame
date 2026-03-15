@@ -13,25 +13,22 @@ public class GazeCameraController : MonoBehaviour
 
     private void Start()
     {
-        // Wir speichern ECHTE Ursprungsrotation genau einmal beim Start
+        // ursprungsrotation wird 1x beim start gespeichert
         startRotation = transform.rotation;
     }
 
     private void Update()
     {
-        // Berechne die Geschwindigkeit basierend auf der TransitionTime
-        // (z.B. wie viel Grad pro Sekunde bewegt werden sollen)
+        // geschwindigkeit basierend auf transitiontime berechnen
         float speed = 1f / Mathf.Max(0.0001f, transitionTime);
 
-        // Wir nutzen Lerp/MoveTowards, um weich zwischen dem aktuellen und dem Zielwinkel zu wechseln
+        //  Lerp/MoveTowards für weiche transitions
         currentPitch = Mathf.MoveTowards(currentPitch, targetPitch, speed * 30f * Time.deltaTime);
         currentYaw = Mathf.MoveTowards(currentYaw, targetYaw, speed * 30f * Time.deltaTime);
 
-        // Wende die Rotation an (Ursprung + aktueller Offset)
+        // rotation anwenden
         transform.rotation = startRotation * Quaternion.Euler(currentPitch, currentYaw, 0f);
     }
-
-    // Von außen aufrufbar, um die Zielwinkel zu setzen
     public void SetTargetAngles(float pitch, float yaw)
     {
         targetPitch = pitch;

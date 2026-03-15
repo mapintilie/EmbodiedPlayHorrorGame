@@ -1,6 +1,4 @@
 using UnityEngine;
-
-// [RequireComponent(typeof(Image))] // <- Entfernt, falls es 3D Cubes sind! 
 public class GazeScreenmove : GazeInteractable
 {
     public enum ViewDirection { Top, Bottom, Left, Right }
@@ -12,7 +10,7 @@ public class GazeScreenmove : GazeInteractable
 
     private void Start()
     {
-        // Sucht automatisch den Controller in der Szene
+        // sucht controller in der szene
         cameraController = FindObjectOfType<GazeCameraController>();
         
         if (cameraController == null)
@@ -28,7 +26,7 @@ public class GazeScreenmove : GazeInteractable
         float pitch = 0f;
         float yaw = 0f;
 
-        // Bestimme das Ziel anhand der Richtung
+        // richtung bestimmen
         switch (viewDirection)
         {
             case ViewDirection.Top:    pitch = -maxAngle; break;
@@ -45,7 +43,7 @@ public class GazeScreenmove : GazeInteractable
     {
         if (cameraController == null) return;
 
-        // Statt die Kamera auf (0,0) zurückzusetzen, frieren wir sie auf der aktuellen Position ein
+        // kamera auf die position einfrieren
         cameraController.StopMovement();
         
         Debug.Log($"Gaze Exit auf {gameObject.name}: Bewegung gestoppt.");
