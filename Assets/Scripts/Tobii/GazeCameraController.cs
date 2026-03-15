@@ -2,9 +2,19 @@ using UnityEngine;
 
 public class GazeCameraController : MonoBehaviour
 {
+    [Header("Gaze Settings")]
     [SerializeField] private float transitionTime = 1f;
-    
-    private Quaternion startRotation;
+    [SerializeField] private float roomChangeGazeSpeedMultiplier = 5f; // Makes gaze reset 5x faster ONLY when changing rooms
+
+    [Header("Turn Settings")]
+    [SerializeField] private float turnSpeed = 300f; 
+
+    private Quaternion absoluteStartRotation;
+    private float currentBaseYaw = 0f; 
+
+    private Quaternion currentBaseRotation;
+    private Quaternion targetBaseRotation;
+
     private float targetPitch = 0f;
     private float targetYaw = 0f;
     
@@ -13,28 +23,60 @@ public class GazeCameraController : MonoBehaviour
 
     private void Start()
     {
-        // ursprungsrotation wird 1x beim start gespeichert
-        startRotation = transform.rotation;
+        absoluteStartRotation = transform.rotation;
+        
+        currentBaseRotation = absoluteStartRotation;
+        targetBaseRotation = absoluteStartRotation;
     }
 
     private void Update()
     {
-        // geschwindigkeit basierend auf transitiontime berechnen
-        float speed = 1f / Mathf.Max(0.0001f, transitionTime);
+        // 1. Check input for 90-degree snap turns
+        if (Input.GetKeyDown(KeyCode.RightArrow))
+        {
+            TurnBase(90f);
+        }
+        else if (Input.GetKeyDown(KeyCode.LeftArrow))
+        {
+            TurnBase(-90f);
+        }
 
-        //  Lerp/MoveTowards für weiche transitions
-        currentPitch = Mathf.MoveTowards(currentPitch, targetPitch, speed * 30f * Time.deltaTime);
-        currentYaw = Mathf.MoveTowards(currentYaw, targetYaw, speed * 30f * Time.deltaTime);
+        // 2. Smoothly animate base rotation
+        currentBaseRotation = Quaternion.RotateTowards(currentBaseRotation, targetBaseRotation, turnSpeed * Time.deltaTime);
 
-        // rotation anwenden
-        transform.rotation = startRotation * Quaternion.Euler(currentPitch, currentYaw, 0f);
+        // 3. Check if we are currently in the middle of a room change
+        // (If the current base rotation hasn't reached the target yet)
+        bool isChangingRooms = Quaternion.Angle(currentBaseRotation, targetBaseRotation) > 0.1f;
+
+        // 4. Calculate Gaze speed
+        float baseSpeed = (1f / Mathf.Max(0.0001f, transitionTime)) * 30f;
+        
+        // Apply the fast multiplier ONLY if the room is actively turning
+        float activeSpeed = isChangingRooms ? (baseSpeed * roomChangeGazeSpeedMultiplier) : baseSpeed;
+
+        currentPitch = Mathf.MoveTowards(currentPitch, targetPitch, activeSpeed * Time.deltaTime);
+        currentYaw = Mathf.MoveTowards(currentYaw, targetYaw, activeSpeed * Time.deltaTime);
+
+        // 5. Combine both
+        transform.rotation = currentBaseRotation * Quaternion.Euler(currentPitch, currentYaw, 0f);
     }
+
+    private void TurnBase(float angle)
+    {
+        currentBaseYaw += angle;
+        targetBaseRotation = absoluteStartRotation * Quaternion.Euler(0f, currentBaseYaw, 0f);
+
+        // Discard the gaze offset so we look straight ahead into the new room
+        targetPitch = 0f;
+        targetYaw = 0f;
+    }
+
     public void SetTargetAngles(float pitch, float yaw)
     {
         targetPitch = pitch;
         targetYaw = yaw;
     }
-    
+
     public void StopMovement()
     {
         targetPitch = currentPitch;
