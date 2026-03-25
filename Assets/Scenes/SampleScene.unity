@@ -421,11 +421,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3bc3a6824a52dc94a92d7a7218507e93, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  parentCanvas: {fileID: 0}
+  parentCanvas: {fileID: 1024183440}
   sizePixels: {x: 48, y: 48}
   indicatorColor: {r: 1, g: 0, b: 0, a: 1}
   followTransform: 1
   defaultDuration: 2
+  screenMargin: 20
 --- !u!4 &303119867
 Transform:
   m_ObjectHideFlags: 0

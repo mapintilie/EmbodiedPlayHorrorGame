@@ -1,3 +1,4 @@
+
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
@@ -96,7 +97,6 @@ public class SpawnIndicatorUI : MonoBehaviour
 
     // Public API
 
-    // Original: Zeigt den Indikator an der Weltposition des Spawn-Transforms für duration Sekunden.
     public void ShowAt(Transform spawnPoint, float duration = -1f)
     {
         if (spawnPoint == null) return;
@@ -114,8 +114,6 @@ public class SpawnIndicatorUI : MonoBehaviour
         UpdatePosition(trackedWorldPos);
     }
 
-    // Neue Methode: Positioniert den UI-Indikator basierend auf dem Namen des SpawnPoints.
-    // "left" -> links, "right" -> rechts, "back" -> unten, "front" -> oben
     public void ShowAtSpawnByName(Transform spawnPoint, float duration = -1f)
     {
         if (spawnPoint == null) return;
@@ -138,7 +136,6 @@ public class SpawnIndicatorUI : MonoBehaviour
         indicatorRect.anchoredPosition = anchored;
     }
 
-    // Zeigt den Indikator an einer Weltposition (wenn kein Transform verfügbar).
     public void ShowAtWorldPosition(Vector3 worldPos, float duration = -1f)
     {
         if (duration <= 0f) duration = defaultDuration;
@@ -175,35 +172,54 @@ public class SpawnIndicatorUI : MonoBehaviour
         Hide();
     }
 
-    // Hilfsmethode: berechnet die anchoredPosition (Canvas‑Local) für einen SpawnPoint‑Namen.
+    // Neue Implementierung: berechne zuerst Screen-Pixelposition für jede Seite,
+    // dann konvertiere mit ScreenPointToLocalPointInRectangle in die Canvas-anchoredPosition.
     private Vector2 ComputeAnchoredPositionForSpawnName(string spawnName, Vector3 fallbackWorldPos)
     {
         if (canvasRect == null)
             EnsureCanvasAndIndicator();
 
-        Rect rect = canvasRect.rect;
-        float halfW = rect.width * 0.5f;
-        float halfH = rect.height * 0.5f;
-        float margin = screenMargin + Mathf.Max(sizePixels.x, sizePixels.y) * 0.5f;
+        if (mainCam == null) mainCam = Camera.main;
 
         string n = (spawnName ?? string.Empty).ToLowerInvariant();
 
-        if (n.Contains("left"))
-            return new Vector2(-halfW + margin, 0f);
-        if (n.Contains("right"))
-            return new Vector2(halfW - margin, 0f);
-        if (n.Contains("back"))
-            return new Vector2(0f, -halfH + margin);
-        if (n.Contains("front"))
-            return new Vector2(0f, halfH - margin);
+        Vector3 screenPoint = new Vector3(Screen.width * 0.5f, Screen.height * 0.5f, 0f);
+        float halfElemW = sizePixels.x * 0.5f;
+        float halfElemH = sizePixels.y * 0.5f;
+        float leftX = screenMargin + halfElemW;
+        float rightX = Screen.width - (screenMargin + halfElemW);
+        float topY = Screen.height - (screenMargin + halfElemH);
+        float bottomY = screenMargin + halfElemH;
 
-        // Fallback: mappe anhand der Weltposition auf Bildschirmposition
-        if (mainCam == null) mainCam = Camera.main;
-        Vector3 screenPoint = (mainCam != null) ? mainCam.WorldToScreenPoint(fallbackWorldPos) : new Vector3(Screen.width * 0.5f, Screen.height * 0.5f, 0f);
-        if (screenPoint.z < 0f)
+        if (n.Contains("left"))
         {
-            screenPoint.x = Screen.width * 0.5f;
-            screenPoint.y = Screen.height * 0.5f;
+            screenPoint = new Vector3(leftX, Screen.height * 0.5f, 0f);
+        }
+        else if (n.Contains("right"))
+        {
+            screenPoint = new Vector3(rightX, Screen.height * 0.5f, 0f);
+        }
+        else if (n.Contains("back"))
+        {
+            screenPoint = new Vector3(Screen.width * 0.5f, bottomY, 0f);
+        }
+        else if (n.Contains("front"))
+        {
+            screenPoint = new Vector3(Screen.width * 0.5f, topY, 0f);
+        }
+        else
+        {
+            // Fallback: world position auf Bildschirm mappen
+            if (mainCam != null)
+                screenPoint = mainCam.WorldToScreenPoint(fallbackWorldPos);
+            else
+                screenPoint = new Vector3(Screen.width * 0.5f, Screen.height * 0.5f, 0f);
+
+            if (screenPoint.z < 0f)
+            {
+                screenPoint.x = Screen.width * 0.5f;
+                screenPoint.y = Screen.height * 0.5f;
+            }
         }
 
         Vector2 localPoint;
