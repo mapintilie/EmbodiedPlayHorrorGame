@@ -108,8 +108,8 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 0.5000001
-  m_Height: 2
+  m_Radius: 0.8
+  m_Height: 3
   m_Direction: 1
   m_Center: {x: 0.000000059604645, y: 0, z: -0.00000008940697}
 --- !u!54 &7072172139250726774
@@ -164,5 +164,5 @@ MonoBehaviour:
   moveSpeed: 3
   target: {fileID: 0}
   startDelayRange: {x: 0, y: 2}
-  stunDuration: 3
   Spawner: {fileID: 0}
+  resumeDelay: 5

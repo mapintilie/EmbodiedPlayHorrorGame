@@ -1,3 +1,4 @@
+
 using System.Collections;
 using UnityEngine;
 
@@ -9,7 +10,7 @@ public class Enemy : GazeInteractable
 {
     [Header("Movement")]
     [Tooltip("How fast the enemy moves towards the player.")]
-    public float moveSpeed = 3f;
+    public float moveSpeed = 2f;
 
     [Tooltip("Optional target for movement. If null, uses Camera.main.")]
     public Transform target;
@@ -17,21 +18,50 @@ public class Enemy : GazeInteractable
     [Tooltip("How long after spawn the enemy waits before starting to move.")]
     public Vector2 startDelayRange = new Vector2(0f, 2f);
 
-    [Header("Stun")]
-    [Tooltip("How long the enemy stays stunned when the player focuses gaze on it.")]
-    public float stunDuration = 3f;
-
     [Header("Respawn")]
     [Tooltip("Spawner that will respawn this enemy when it dies.")]
     public EnemySpawner Spawner;
 
+    [Header("Gaze")]
+    [Tooltip("Delay after gaze exit until movement resumes.")]
+    [SerializeField] private float resumeDelay = 10f;
+
     // State
     private bool canMove;
-    private bool isStunned;
+    private bool isStopped;
+    private bool canBeLookedAt = true; // erlaubt ein Gaze pro Raum
+    private int gazeHits = 0;
+    private bool stoppedByGaze = false;
+    private bool isDying = false;
+
+    private Renderer cachedRenderer;
+
+    private Coroutine resumeCoroutine;
 
     private void Start()
     {
         StartCoroutine(EnableMovementAfterDelay());
+
+        cachedRenderer = GetComponentInChildren<Renderer>();
+        if (cachedRenderer == null)
+        {
+            Debug.LogWarning($"[Enemy] No Renderer found on {name}");
+        }
+
+        // subscribe room-change event so gaze can be used again after turning
+        GazeCameraController.OnRoomChanged += OnRoomChanged;
+    }
+
+    private void OnDestroy()
+    {
+        GazeCameraController.OnRoomChanged -= OnRoomChanged;
+    }
+
+    private void OnRoomChanged()
+    {
+        // Nach Raumwechsel kann der Enemy wieder einmal angeguckt werden
+        canBeLookedAt = true;
+        // Keine Farbänderung / kein Zurücksetzen — Farbe bleibt dauerhaft
     }
 
     protected override void Update()
@@ -39,7 +69,7 @@ public class Enemy : GazeInteractable
         // Keep base gaze logic running.
         base.Update();
 
-        if (!canMove || isStunned) return;
+        if (!canMove || isStopped) return;
 
         Transform moveTarget = GetMoveTarget();
         if (moveTarget == null) return;
@@ -53,11 +83,68 @@ public class Enemy : GazeInteractable
         transform.position += move;
     }
 
+    // Wird aufgerufen, wenn der Gaze-Fokus abgeschlossen ist (vollständig angesehen)
     protected override void OnGazeFocusedCallback()
     {
-        if (!isStunned)
+        if (!canBeLookedAt) return;
+
+        gazeHits++;
+        canBeLookedAt = false; // nur ein Blick pro Raum
+
+        // Stoppe Bewegung solange der Spieler hinschaut
+        stoppedByGaze = true;
+        isStopped = true;
+        canMove = false;
+
+        // Stoppe eventuell laufenden Resume-Timer
+        if (resumeCoroutine != null)
         {
-            StartCoroutine(StunThenDie());
+            StopCoroutine(resumeCoroutine);
+            resumeCoroutine = null;
+        }
+
+        // Setze Farbe je nach Trefferanzahl (nur einmal pro Blick)
+        if (cachedRenderer != null)
+        {
+            if (gazeHits == 1)
+                cachedRenderer.material.color = Color.yellow;
+            else if (gazeHits == 2)
+                cachedRenderer.material.color = Color.red;
+            // WICHTIG: Es gibt keine Stelle, die die Farbe wieder auf die vorherige zurücksetzt.
+        }
+
+        // Zerstöre sofort beim 3. Treffer
+        if (gazeHits >= 3)
+        {
+            StartCoroutine(FlashBlackAndDie());
+        }
+    }
+
+    // Wird aufgerufen, wenn der Gaze verlassen wird
+    protected override void OnGazeExitCallback()
+    {
+        if (stoppedByGaze)
+        {
+            stoppedByGaze = false;
+
+            // starte verzögertes Wiederanfahren (wird abgebrochen, falls wieder hingeschaut wird)
+            if (resumeCoroutine != null)
+                StopCoroutine(resumeCoroutine);
+
+            resumeCoroutine = StartCoroutine(ResumeAfterDelay());
+        }
+    }
+
+    private IEnumerator ResumeAfterDelay()
+    {
+        yield return new WaitForSeconds(resumeDelay);
+        resumeCoroutine = null;
+
+        // nur weitermachen, wenn aktuell nicht erneut angesehen und nicht bereits gestorben
+        if (!stoppedByGaze && gazeHits < 3)
+        {
+            isStopped = false;
+            canMove = true;
         }
     }
 
@@ -70,22 +157,28 @@ public class Enemy : GazeInteractable
         canMove = true;
     }
 
-    private IEnumerator StunThenDie()
+    // Setzt Material kurz auf schwarz und zerstört dann nach 1s
+    private IEnumerator FlashBlackAndDie()
     {
-        isStunned = true;
-        canMove = false;
+        if (isDying) yield break;
+        isDying = true;
 
-        // Optionally: add visual feedback here (e.g. change material color).
+        if (cachedRenderer != null)
+        {
+            // access .material to ensure instance so we don't modify shared material unexpectedly
+            cachedRenderer.material.color = Color.black;
+        }
 
-        yield return new WaitForSeconds(stunDuration);
+        yield return new WaitForSeconds(1f);
 
-        Die();
+        Spawner?.NotifyEnemyDied(this);
+        Destroy(gameObject);
     }
 
     private void Die()
     {
-        Spawner?.NotifyEnemyDied(this);
-        Destroy(gameObject);
+        // fallback falls andere Stellen noch Die() aufrufen: benutze die Coroutine
+        StartCoroutine(FlashBlackAndDie());
     }
 
     private Transform GetMoveTarget()

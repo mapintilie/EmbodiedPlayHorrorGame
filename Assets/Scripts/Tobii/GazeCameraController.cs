@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 public class GazeCameraController : MonoBehaviour
@@ -8,6 +9,8 @@ public class GazeCameraController : MonoBehaviour
 
     [Header("Turn Settings")]
     [SerializeField] private float turnSpeed = 300f; 
+
+    public static event Action OnRoomChanged;
 
     private Quaternion absoluteStartRotation;
     private float currentBaseYaw = 0f; 
@@ -45,7 +48,6 @@ public class GazeCameraController : MonoBehaviour
         currentBaseRotation = Quaternion.RotateTowards(currentBaseRotation, targetBaseRotation, turnSpeed * Time.deltaTime);
 
         // 3. Check if we are currently in the middle of a room change
-        // (If the current base rotation hasn't reached the target yet)
         bool isChangingRooms = Quaternion.Angle(currentBaseRotation, targetBaseRotation) > 0.1f;
 
         // 4. Calculate Gaze speed
@@ -69,6 +71,9 @@ public class GazeCameraController : MonoBehaviour
         // Discard the gaze offset so we look straight ahead into the new room
         targetPitch = 0f;
         targetYaw = 0f;
+
+        // Notify listeners (z. B. Enemies), damit sie wieder gaze-aktiviert werden
+        OnRoomChanged?.Invoke();
     }
 
     public void SetTargetAngles(float pitch, float yaw)
