@@ -8,7 +8,7 @@ public class GazeCameraController : MonoBehaviour
     [SerializeField] private float roomChangeGazeSpeedMultiplier = 5f; // Makes gaze reset 5x faster ONLY when changing rooms
 
     [Header("Turn Settings")]
-    [SerializeField] private float turnSpeed = 300f; 
+    [SerializeField] private float turnSpeed = 150f; 
 
     public static event Action OnRoomChanged;
 

@@ -169,7 +169,7 @@ public class Enemy : GazeInteractable
             cachedRenderer.material.color = Color.black;
         }
 
-        yield return new WaitForSeconds(1f);
+        yield return new WaitForSeconds(0.2f);
 
         Spawner?.NotifyEnemyDied(this);
         Destroy(gameObject);
