@@ -4,8 +4,12 @@ using UnityEngine;
 /// <summary>
 /// Spawns enemies at configured points and respawns them when they die.
 /// </summary>
+ 
 public class EnemySpawner : MonoBehaviour
+
 {
+    public AudioSource spawnAudiosource;
+    
     [Tooltip("Enemy prefab that contains the Enemy component.")]
     public GameObject enemyPrefab;
 
@@ -66,5 +70,8 @@ public class EnemySpawner : MonoBehaviour
         {
             Debug.LogWarning("Spawned object does not have an Enemy component.", go);
         }
+
+        spawnAudiosource.Play();
+        
     }
 }
