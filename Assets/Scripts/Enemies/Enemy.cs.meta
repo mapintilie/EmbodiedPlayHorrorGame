@@ -1,2 +1,16 @@
 fileFormatVersion: 2
 guid: cfa1c5f6c88b54a5588f3b031dcd3829
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - target: {instanceID: 0}
+  - Spawner: {instanceID: 0}
+  - angelPrefab1: {fileID: 853545692942053181, guid: 0fdb5b44d3b563b4087a8af26ecbad09, type: 3}
+  - angelPrefab2: {fileID: 7743493502972097605, guid: b1dda921ff4142e41a45495a28812930, type: 3}
+  - angelPrefab3: {fileID: 960009754433541189, guid: 7b1991c50830f964291464a78d0ad91b, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

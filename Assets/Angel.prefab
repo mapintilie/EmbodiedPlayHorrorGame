@@ -166,3 +166,8 @@ MonoBehaviour:
   startDelayRange: {x: 0, y: 2}
   Spawner: {fileID: 0}
   resumeDelay: 5
+  angelPrefab1: {fileID: 0}
+  angelPrefab2: {fileID: 0}
+  angelPrefab3: {fileID: 0}
+  showSpawnIndicatorOnSpawn: 1
+  spawnIndicatorDuration: 2
