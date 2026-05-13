@@ -1,3 +1,4 @@
+// csharp
 using UnityEngine;
 using UnityEngine.UI;
 using System.Globalization;
@@ -10,6 +11,9 @@ public class GameOverManager : MonoBehaviour
     [Tooltip("Wenn true wird Time.timeScale auf 0 gesetzt bei GameOver.")]
     public bool pauseTimeOnGameOver = true;
 
+    [Tooltip("Optional: Referenz auf das UI-Text Element named 'Hinweistext'. Falls leer, wird GameObject.Find versucht.")]
+    public Text hintText;
+
     private bool gameOverTriggered = false;
     private int destroyedCount = 0;
     private float startRealtime = 0f;
@@ -19,6 +23,24 @@ public class GameOverManager : MonoBehaviour
         if (Instance != null && Instance != this) Destroy(this.gameObject);
         else Instance = this;
         startRealtime = Time.realtimeSinceStartup;
+
+        var col = GetComponent<Collider>();
+        if (col == null)
+            Debug.LogWarning("GameOverManager: kein Collider vorhanden. Attach an Player Collider or call GameOverManager.ReportCollision manually.");
+        else
+            col.isTrigger = true;
+
+        // Wenn im Inspector nichts gesetzt wurde, versuche das Element per Name zu finden.
+        if (hintText == null)
+        {
+            var go = GameObject.Find("Hinweistext");
+            if (go != null)
+                hintText = go.GetComponent<Text>();
+        }
+
+        // Stelle sicher, dass das Hinweistext-Element standardmäßig verborgen ist.
+        if (hintText != null)
+            hintText.gameObject.SetActive(false);
     }
 
     // Aufruf durch EnemySpawner wenn ein Enemy gestorben ist
@@ -27,7 +49,7 @@ public class GameOverManager : MonoBehaviour
         destroyedCount++;
     }
 
-    // Attach an das Player-Collider-GameObject. 
+    // Attach an das Player-Collider-GameObject.
     private void OnTriggerEnter(Collider other)
     {
         Debug.Log($"GameOverManager: OnTriggerEnter with {other.name}", this);
@@ -40,24 +62,31 @@ public class GameOverManager : MonoBehaviour
         TryTriggerGameOver(collision.collider);
     }
 
+    // Statische Hilfsmethode: andere Scripts können Kollisionen melden, falls GameOverManager nicht am Player hängt.
+    public static void ReportCollision(Collider other)
+    {
+        if (Instance == null)
+        {
+            Debug.LogWarning("GameOverManager.ReportCollision called but no Instance present.");
+            return;
+        }
+        Instance.TryTriggerGameOver(other);
+    }
+
     private void TryTriggerGameOver(Collider other)
     {
         if (gameOverTriggered) return;
         if (other == null) return;
 
-        // Versuche mehrere Wege, ein Enemy zu finden
         Enemy enemy = null;
 
-        // direktes oder parent/child durchsuchen
         enemy = other.GetComponent<Enemy>();
         if (enemy == null) enemy = other.GetComponentInParent<Enemy>();
         if (enemy == null) enemy = other.GetComponentInChildren<Enemy>();
 
-        // falls Rigidbody vorhanden, prüfe das Root-GameObject
         if (enemy == null && other.attachedRigidbody != null)
             enemy = other.attachedRigidbody.gameObject.GetComponentInParent<Enemy>();
 
-        // fallback auf root
         if (enemy == null && other.transform != null)
             enemy = other.transform.root.GetComponent<Enemy>();
 
@@ -78,10 +107,44 @@ public class GameOverManager : MonoBehaviour
         float elapsed = Time.realtimeSinceStartup - startRealtime;
         string timeStr = FormatTime(elapsed);
 
-        CreateBlackOverlayWithText($"Game Over\n\nAngels destroyed: {destroyedCount}\nTime: {timeStr}");
+        string message = $"Game Over\n\nAngels destroyed: {destroyedCount}\nTime: {timeStr}";
+
+        // Versuche erstes das vorhandene Hinweistext-Element zu benutzen, ansonsten Fallback auf das Overlay.
+        if (!TryShowHintText(message))
+            CreateBlackOverlayWithText(message);
 
         if (pauseTimeOnGameOver)
             Time.timeScale = 0f;
+    }
+
+    private bool TryShowHintText(string message)
+    {
+        if (hintText == null) return false;
+
+        hintText.text = message;
+        var go = hintText.gameObject;
+        go.SetActive(true);
+
+        // Bring das UI-Element in den Vordergrund (Canvas-SortingOrder erhöhen falls vorhanden)
+        var canvas = hintText.GetComponentInParent<Canvas>();
+        if (canvas != null)
+            canvas.sortingOrder = 1000;
+
+        // Optional: das RectTransform auf Fullscreen stretchen, damit der Text zentral über dem ganzen Bildschirm liegt.
+        var rt = hintText.GetComponent<RectTransform>();
+        if (rt != null)
+        {
+            rt.anchorMin = new Vector2(0f, 0f);
+            rt.anchorMax = new Vector2(1f, 1f);
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+        }
+
+        // Stelle sicher, dass der Text zentriert und gut lesbar ist
+        hintText.alignment = TextAnchor.MiddleCenter;
+        hintText.color = Color.white;
+
+        return true;
     }
 
     private string FormatTime(float seconds)

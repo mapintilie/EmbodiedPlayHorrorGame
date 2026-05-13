@@ -1,8 +1,13 @@
+// csharp
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.AI;
+using Random = UnityEngine.Random;
 
 [RequireComponent(typeof(Collider))]
+[RequireComponent(typeof(NavMeshAgent))]
 public class Enemy : GazeInteractable
 {
     [Header("Movement")]
@@ -48,11 +53,42 @@ public class Enemy : GazeInteractable
     private GameObject currentVisual = null;
 
     private Coroutine resumeCoroutine;
-    // Name des aktuell gesetzten Spawn-Punkts (z.B. "1", "2", ...)
     private string currentSpawnName = null;
+
+    private NavMeshAgent agent;
 
     private void Start()
     {
+        agent = GetComponent<NavMeshAgent>();
+        if (agent == null)
+        {
+            Debug.LogWarning("Enemy: NavMeshAgent missing.", this);
+        }
+        else
+        {
+            agent.speed = moveSpeed * movementSpeedMultiplier;
+            agent.angularSpeed = 720f;
+            agent.acceleration = 8f;
+
+            // robustes Setzen von obstacleAvoidanceType: verschiedene Unity-Versionen haben unterschiedliche Enum-Namen
+            ObstacleAvoidanceType chosen;
+            if (Enum.TryParse<ObstacleAvoidanceType>("MedQuality", true, out chosen) ||
+                Enum.TryParse<ObstacleAvoidanceType>("MediumQuality", true, out chosen) ||
+                Enum.TryParse<ObstacleAvoidanceType>("Medium", true, out chosen) ||
+                Enum.TryParse<ObstacleAvoidanceType>("GoodQuality", true, out chosen))
+            {
+                agent.obstacleAvoidanceType = chosen;
+            }
+            else
+            {
+                // Fallback auf Index (häufig entspricht 2 einer mittleren Qualität)
+                agent.obstacleAvoidanceType = (ObstacleAvoidanceType)2;
+                Debug.LogWarning("Enemy: couldn't resolve ObstacleAvoidanceType name, using fallback index 2.", this);
+            }
+
+            agent.updateRotation = true;
+        }
+
         if (obstacleLayer.value == 0)
         {
             int lay = LayerMask.NameToLayer("Layout (1)");
@@ -64,7 +100,6 @@ public class Enemy : GazeInteractable
         TryFindCylinderRenderer();
         SetupInitialVisual();
 
-        // Sicherstellen: beim Spawn immer auf einen random Punkt aus Spawners1 teleportieren
         var initial = TeleportToRandomWithTagsReturn(new string[] { spawnTagStage1 }, excludeSameName: false);
         if (initial != null)
             currentSpawnName = initial.name;
@@ -93,12 +128,55 @@ public class Enemy : GazeInteractable
     {
         base.Update();
 
+        // NavMesh-based movement
+        if (agent != null && agent.isOnNavMesh)
+        {
+            agent.speed = moveSpeed * movementSpeedMultiplier;
+
+            bool shouldMove = canMove && !isStopped && !isDying;
+            agent.isStopped = !shouldMove;
+
+            if (shouldMove)
+            {
+                Transform moveTarget = GetMoveTarget();
+                if (moveTarget != null)
+                {
+                    // SetDestination nur setzen, wenn Ziel sich deutlich verändert
+                    if (!agent.hasPath || Vector3.Distance(agent.destination, moveTarget.position) > 0.5f)
+                        agent.SetDestination(moveTarget.position);
+                }
+            }
+
+            // optional: aktualisiere currentVisual position sanft wie vorher
+            if (currentVisual != null)
+            {
+                Vector3 visualTarget = (agent.hasPath ? agent.steeringTarget : transform.position);
+                Vector3 vdir = (visualTarget - currentVisual.transform.position);
+                vdir.y = 0f;
+                float currentMoveSpeed = agent.speed;
+                if (vdir.sqrMagnitude > 0.0001f)
+                {
+                    currentVisual.transform.position += vdir.normalized * (currentMoveSpeed * 0.2f) * Time.deltaTime;
+                }
+                else
+                {
+                    Vector3 toEnemy = (transform.position - currentVisual.transform.position);
+                    toEnemy.y = 0f;
+                    if (toEnemy.sqrMagnitude > 0.0001f)
+                        currentVisual.transform.position += toEnemy.normalized * (currentMoveSpeed * 0.2f) * Time.deltaTime;
+                }
+            }
+
+            return;
+        }
+
+        // Fallback: ursprüngliche manuelle Bewegung (falls kein NavMeshAgent oder nicht auf NavMesh)
         if (!canMove || isStopped || isDying) return;
 
-        Transform moveTarget = GetMoveTarget();
-        if (moveTarget == null) return;
+        Transform fallbackTarget = GetMoveTarget();
+        if (fallbackTarget == null) return;
 
-        Vector3 direction = (moveTarget.position - transform.position);
+        Vector3 direction = (fallbackTarget.position - transform.position);
         direction.y = 0f;
 
         if (direction.sqrMagnitude < 0.01f) return;
@@ -106,8 +184,8 @@ public class Enemy : GazeInteractable
         Vector3 desiredDir = direction.normalized;
         float dt = Time.deltaTime;
 
-        float currentMoveSpeed = moveSpeed * movementSpeedMultiplier;
-        Vector3 desiredMove = desiredDir * currentMoveSpeed * dt;
+        float currentMoveSpeedFallback = moveSpeed * movementSpeedMultiplier;
+        Vector3 desiredMove = desiredDir * currentMoveSpeedFallback * dt;
 
         bool blocked = Physics.SphereCast(transform.position, obstacleCheckRadius, desiredDir, out RaycastHit hitInfo, desiredMove.magnitude, obstacleLayer, QueryTriggerInteraction.Ignore);
 
@@ -120,31 +198,13 @@ public class Enemy : GazeInteractable
             Vector3 perp = Vector3.Cross(desiredDir, Vector3.up).normalized;
             Vector3 tryA = perp;
             Vector3 tryB = -perp;
-            bool blockedA = Physics.SphereCast(transform.position, obstacleCheckRadius, tryA, out _, currentMoveSpeed * dt, obstacleLayer, QueryTriggerInteraction.Ignore);
-            bool blockedB = Physics.SphereCast(transform.position, obstacleCheckRadius, tryB, out _, currentMoveSpeed * dt, obstacleLayer, QueryTriggerInteraction.Ignore);
+            bool blockedA = Physics.SphereCast(transform.position, obstacleCheckRadius, tryA, out _, currentMoveSpeedFallback * dt, obstacleLayer, QueryTriggerInteraction.Ignore);
+            bool blockedB = Physics.SphereCast(transform.position, obstacleCheckRadius, tryB, out _, currentMoveSpeedFallback * dt, obstacleLayer, QueryTriggerInteraction.Ignore);
 
             if (!blockedA)
-                transform.position += tryA * (currentMoveSpeed * dt);
+                transform.position += tryA * (currentMoveSpeedFallback * dt);
             else if (!blockedB)
-                transform.position += tryB * (currentMoveSpeed * dt);
-        }
-
-        if (currentVisual != null)
-        {
-            Vector3 visualTarget = moveTarget.position;
-            Vector3 vdir = (visualTarget - currentVisual.transform.position);
-            vdir.y = 0f;
-            if (vdir.sqrMagnitude > 0.0001f)
-            {
-                currentVisual.transform.position += vdir.normalized * (currentMoveSpeed * 0.2f) * dt;
-            }
-            else
-            {
-                Vector3 toEnemy = (transform.position - currentVisual.transform.position);
-                toEnemy.y = 0f;
-                if (toEnemy.sqrMagnitude > 0.0001f)
-                    currentVisual.transform.position += toEnemy.normalized * (currentMoveSpeed * 0.2f) * dt;
-            }
+                transform.position += tryB * (currentMoveSpeedFallback * dt);
         }
     }
 
@@ -174,17 +234,13 @@ public class Enemy : GazeInteractable
         }
     }
 
-    // Beim Wegschauen: sofort teleportieren (kein Delay)
     protected override void OnGazeExitCallback()
     {
         if (stoppedByGaze)
         {
             stoppedByGaze = false;
-
-            // Sofort teleportieren entsprechend Trefferanzahl
             DoImmediateTeleportForGazeState();
 
-            // nach Teleport startet der Resume-Timer
             if (resumeCoroutine != null)
             {
                 StopCoroutine(resumeCoroutine);
@@ -204,7 +260,6 @@ public class Enemy : GazeInteractable
         }
         else if (gazeHits == 2)
         {
-            // jetzt ausschließlich Spawners3
             GameObject picked = TeleportToRandomWithTagsReturn(new string[] { spawnTagStage3 }, excludeSameName: true);
             if (picked != null)
             {
@@ -308,80 +363,84 @@ public class Enemy : GazeInteractable
         UpdateCachedRenderers();
     }
 
-    /// <summary>
-    /// Teleportiert zu einem zufälligen Punkt aus den angegebenen Tags.
-    /// Wenn excludeSameName == true werden Kandidaten gefiltert, deren Name gleich currentSpawnName ist.
-    /// Gibt das ausgewählte GameObject zurück (oder null).
-    /// </summary>
     private GameObject TeleportToRandomWithTagsReturn(string[] tags, bool excludeSameName = true)
-{
-    if (tags == null || tags.Length == 0) return null;
-
-    var allCandidates = new List<GameObject>();
-    foreach (var t in tags)
     {
-        if (string.IsNullOrEmpty(t)) continue;
-        var gos = GameObject.FindGameObjectsWithTag(t);
-        if (gos != null && gos.Length > 0)
-            allCandidates.AddRange(gos);
-    }
+        if (tags == null || tags.Length == 0) return null;
 
-    if (allCandidates.Count == 0) return null;
-
-    // Filter nach gleichem Namen (wie bisher)
-    List<GameObject> filteredByName = allCandidates;
-    if (excludeSameName && !string.IsNullOrEmpty(currentSpawnName))
-    {
-        filteredByName = new List<GameObject>();
-        foreach (var g in allCandidates)
+        var allCandidates = new List<GameObject>();
+        foreach (var t in tags)
         {
-            if (g == null) continue;
-            if (g.name == currentSpawnName) continue;
-            filteredByName.Add(g);
+            if (string.IsNullOrEmpty(t)) continue;
+            var gos = GameObject.FindGameObjectsWithTag(t);
+            if (gos != null && gos.Length > 0)
+                allCandidates.AddRange(gos);
         }
-    }
 
-    if (filteredByName.Count == 0)
-    {
-        Debug.LogWarning($"Teleport: keine Kandidaten nach Ausschluss des gleichen Spawn-Namens ('{currentSpawnName}'). Kein Teleport.", this);
-        return null;
-    }
+        if (allCandidates.Count == 0) return null;
 
-    // Weiter filtern: keine Kandidaten auswählen, die aktuell von einem anderen Enemy belegt sind
-    var allEnemies = GameObject.FindObjectsOfType<Enemy>();
-    float occupancyRadius = 0.5f;
-    List<GameObject> available = new List<GameObject>();
-    foreach (var g in filteredByName)
-    {
-        if (g == null) continue;
-        bool occupied = false;
-        foreach (var e in allEnemies)
+        List<GameObject> filteredByName = allCandidates;
+        if (excludeSameName && !string.IsNullOrEmpty(currentSpawnName))
         {
-            if (e == null) continue;
-            if (e == this) continue; // sich selbst ignorieren
-            if (Vector3.Distance(e.transform.position, g.transform.position) <= occupancyRadius)
+            filteredByName = new List<GameObject>();
+            foreach (var g in allCandidates)
             {
-                occupied = true;
-                break;
+                if (g == null) continue;
+                if (g.name == currentSpawnName) continue;
+                filteredByName.Add(g);
             }
         }
-        if (!occupied) available.Add(g);
+
+        if (filteredByName.Count == 0)
+        {
+            Debug.LogWarning($"Teleport: keine Kandidaten nach Ausschluss des gleichen Spawn-Namens ('{currentSpawnName}'). Kein Teleport.", this);
+            return null;
+        }
+
+        var allEnemies = GameObject.FindObjectsOfType<Enemy>();
+        float occupancyRadius = 0.5f;
+        List<GameObject> available = new List<GameObject>();
+        foreach (var g in filteredByName)
+        {
+            if (g == null) continue;
+            bool occupied = false;
+            foreach (var e in allEnemies)
+            {
+                if (e == null) continue;
+                if (e == this) continue;
+                if (Vector3.Distance(e.transform.position, g.transform.position) <= occupancyRadius)
+                {
+                    occupied = true;
+                    break;
+                }
+            }
+            if (!occupied) available.Add(g);
+        }
+
+        if (available.Count == 0)
+        {
+            Debug.LogWarning($"Teleport: keine freien Kandidaten (nach Occupancy-Filter). Kein Teleport.", this);
+            return null;
+        }
+
+        var pick = available[Random.Range(0, available.Count)];
+
+        // wenn NavMeshAgent vorhanden, warp benutzen damit Agent-Path konsistent bleibt
+        if (agent != null && agent.isOnNavMesh)
+        {
+            agent.Warp(pick.transform.position);
+            transform.rotation = pick.transform.rotation;
+            agent.ResetPath();
+        }
+        else
+        {
+            transform.position = pick.transform.position;
+            transform.rotation = pick.transform.rotation;
+        }
+
+        UpdateCachedRenderers();
+
+        return pick;
     }
-
-    if (available.Count == 0)
-    {
-        Debug.LogWarning($"Teleport: keine freien Kandidaten (nach Occupancy-Filter). Kein Teleport.", this);
-        return null;
-    }
-
-    var pick = available[Random.Range(0, available.Count)];
-    transform.position = pick.transform.position;
-    transform.rotation = pick.transform.rotation;
-
-    UpdateCachedRenderers();
-
-    return pick;
-}
 
     private void TeleportToRandomWithTags(string[] tags)
     {
