@@ -169,5 +169,6 @@ MonoBehaviour:
   angelPrefab1: {fileID: 0}
   angelPrefab2: {fileID: 0}
   angelPrefab3: {fileID: 0}
+  cylinderRenderer: {fileID: 0}
   showSpawnIndicatorOnSpawn: 1
   spawnIndicatorDuration: 2
