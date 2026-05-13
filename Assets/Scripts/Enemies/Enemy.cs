@@ -6,7 +6,10 @@ using UnityEngine;
 public class Enemy : GazeInteractable
 {
     [Header("Movement")]
-    public float moveSpeed = 2f;
+    public float moveSpeed = 2.5f;
+    [Tooltip("Globaler Multiplikator für die eigentliche Movement-Geschwindigkeit (z.B. 0.25 = Viertel der Basisgeschwindigkeit)")]
+    public float movementSpeedMultiplier = 0.5f;
+
     public Transform target;
     public Vector2 startDelayRange = new Vector2(0f, 2f);
 
@@ -16,14 +19,17 @@ public class Enemy : GazeInteractable
     [Header("Gaze")]
     [SerializeField] private float resumeDelay = 10f;
 
-    [Header("Angel Prefabs")]
-    public GameObject angelPrefab1;
-    public GameObject angelPrefab2;
-    public GameObject angelPrefab3;
+    [Header("Spawn tags")]
+    public string spawnTagStage1 = "Spawners1";
+    public string spawnTagStage2 = "Spawners2";
+    public string spawnTagStage3 = "Spawners3";
 
     [Header("Cylinder (optional)")]
-    [Tooltip("Renderer of the cylinder that should change color. If null, the script will try to find a child named 'Cylinder' or a suitable renderer.")]
     public Renderer cylinderRenderer;
+
+    [Header("Obstacle avoidance")]
+    public LayerMask obstacleLayer;
+    public float obstacleCheckRadius = 0.3f;
 
     [Header("Spawn Indicator")]
     public bool showSpawnIndicatorOnSpawn = true;
@@ -36,21 +42,32 @@ public class Enemy : GazeInteractable
     private int gazeHits = 0;
     private bool stoppedByGaze = false;
     private bool isDying = false;
+    private bool spawnedAtStage3 = false;
 
     private Renderer[] cachedRenderers;
-    private GameObject currentVisual; // now instantiated as an independent object (not parented)
+    private GameObject currentVisual = null;
 
     private Coroutine resumeCoroutine;
+    // Name des aktuell gesetzten Spawn-Punkts (z.B. "1", "2", ...)
+    private string currentSpawnName = null;
 
     private void Start()
     {
+        if (obstacleLayer.value == 0)
+        {
+            int lay = LayerMask.NameToLayer("Layout (1)");
+            if (lay >= 0) obstacleLayer = 1 << lay;
+        }
+
         StartCoroutine(EnableMovementAfterDelay());
 
-        // try to find cylinder renderer before adding angel visual
         TryFindCylinderRenderer();
-
-        // Setup initial visual (Angel1) if configured (do not remove existing cylinder)
         SetupInitialVisual();
+
+        // Sicherstellen: beim Spawn immer auf einen random Punkt aus Spawners1 teleportieren
+        var initial = TeleportToRandomWithTagsReturn(new string[] { spawnTagStage1 }, excludeSameName: false);
+        if (initial != null)
+            currentSpawnName = initial.name;
 
         if (showSpawnIndicatorOnSpawn)
         {
@@ -76,44 +93,64 @@ public class Enemy : GazeInteractable
     {
         base.Update();
 
-        if (!canMove || isStopped) return;
+        if (!canMove || isStopped || isDying) return;
 
         Transform moveTarget = GetMoveTarget();
         if (moveTarget == null) return;
 
-        Vector3 direction = moveTarget.position - transform.position;
+        Vector3 direction = (moveTarget.position - transform.position);
         direction.y = 0f;
 
         if (direction.sqrMagnitude < 0.01f) return;
 
-        Vector3 move = direction.normalized * moveSpeed * Time.deltaTime;
-        transform.position += move;
+        Vector3 desiredDir = direction.normalized;
+        float dt = Time.deltaTime;
 
-        // Move the angel visual independently at 0.2x of the enemy's current moveSpeed
+        float currentMoveSpeed = moveSpeed * movementSpeedMultiplier;
+        Vector3 desiredMove = desiredDir * currentMoveSpeed * dt;
+
+        bool blocked = Physics.SphereCast(transform.position, obstacleCheckRadius, desiredDir, out RaycastHit hitInfo, desiredMove.magnitude, obstacleLayer, QueryTriggerInteraction.Ignore);
+
+        if (!blocked)
+        {
+            transform.position += desiredMove;
+        }
+        else
+        {
+            Vector3 perp = Vector3.Cross(desiredDir, Vector3.up).normalized;
+            Vector3 tryA = perp;
+            Vector3 tryB = -perp;
+            bool blockedA = Physics.SphereCast(transform.position, obstacleCheckRadius, tryA, out _, currentMoveSpeed * dt, obstacleLayer, QueryTriggerInteraction.Ignore);
+            bool blockedB = Physics.SphereCast(transform.position, obstacleCheckRadius, tryB, out _, currentMoveSpeed * dt, obstacleLayer, QueryTriggerInteraction.Ignore);
+
+            if (!blockedA)
+                transform.position += tryA * (currentMoveSpeed * dt);
+            else if (!blockedB)
+                transform.position += tryB * (currentMoveSpeed * dt);
+        }
+
         if (currentVisual != null)
         {
-            // If there's a global move target, have the visual head toward that target at reduced speed
             Vector3 visualTarget = moveTarget.position;
-            Vector3 vdir = visualTarget - currentVisual.transform.position;
+            Vector3 vdir = (visualTarget - currentVisual.transform.position);
             vdir.y = 0f;
             if (vdir.sqrMagnitude > 0.0001f)
             {
-                currentVisual.transform.position += vdir.normalized * (moveSpeed * 0.2f) * Time.deltaTime;
+                currentVisual.transform.position += vdir.normalized * (currentMoveSpeed * 0.2f) * dt;
             }
             else
             {
-                // If already at the target, gently approach the enemy position so it doesn't drift away
-                Vector3 toEnemy = transform.position - currentVisual.transform.position;
+                Vector3 toEnemy = (transform.position - currentVisual.transform.position);
                 toEnemy.y = 0f;
                 if (toEnemy.sqrMagnitude > 0.0001f)
-                    currentVisual.transform.position += toEnemy.normalized * (moveSpeed * 0.2f) * Time.deltaTime;
+                    currentVisual.transform.position += toEnemy.normalized * (currentMoveSpeed * 0.2f) * dt;
             }
         }
     }
 
     protected override void OnGazeFocusedCallback()
     {
-        if (!canBeLookedAt) return;
+        if (!canBeLookedAt || isDying) return;
 
         gazeHits++;
         canBeLookedAt = false;
@@ -128,34 +165,54 @@ public class Enemy : GazeInteractable
             resumeCoroutine = null;
         }
 
-        // Change cylinder color according to hit count
         ApplyCylinderColorForHit(gazeHits);
 
-        // Swap angels
-        if (gazeHits == 1)
-            SwapVisualToPrefab(angelPrefab2);
-        else if (gazeHits == 2)
-            SwapVisualToPrefab(angelPrefab3);
-
-        // On third hit: black and die after 0.5s
         if (gazeHits >= 3)
         {
-            // ensure cylinder is black immediately
             ApplyCylinderColorForHit(3);
             StartCoroutine(DieAfterDelay(0.5f));
         }
     }
 
+    // Beim Wegschauen: sofort teleportieren (kein Delay)
     protected override void OnGazeExitCallback()
     {
         if (stoppedByGaze)
         {
             stoppedByGaze = false;
 
-            if (resumeCoroutine != null)
-                StopCoroutine(resumeCoroutine);
+            // Sofort teleportieren entsprechend Trefferanzahl
+            DoImmediateTeleportForGazeState();
 
+            // nach Teleport startet der Resume-Timer
+            if (resumeCoroutine != null)
+            {
+                StopCoroutine(resumeCoroutine);
+                resumeCoroutine = null;
+            }
             resumeCoroutine = StartCoroutine(ResumeAfterDelay());
+        }
+    }
+
+    private void DoImmediateTeleportForGazeState()
+    {
+        if (gazeHits == 1)
+        {
+            GameObject picked = TeleportToRandomWithTagsReturn(new string[] { spawnTagStage2 }, excludeSameName: true);
+            if (picked != null) currentSpawnName = picked.name;
+            spawnedAtStage3 = false;
+        }
+        else if (gazeHits == 2)
+        {
+            // jetzt ausschließlich Spawners3
+            GameObject picked = TeleportToRandomWithTagsReturn(new string[] { spawnTagStage3 }, excludeSameName: true);
+            if (picked != null)
+            {
+                currentSpawnName = picked.name;
+                spawnedAtStage3 = picked.CompareTag(spawnTagStage3);
+                if (spawnedAtStage3)
+                    target = Camera.main != null ? Camera.main.transform : target;
+            }
         }
     }
 
@@ -164,7 +221,7 @@ public class Enemy : GazeInteractable
         yield return new WaitForSeconds(resumeDelay);
         resumeCoroutine = null;
 
-        if (!stoppedByGaze && gazeHits < 3)
+        if (!stoppedByGaze && gazeHits < 3 && !isDying)
         {
             isStopped = false;
             canMove = true;
@@ -203,30 +260,22 @@ public class Enemy : GazeInteractable
 
         Spawner?.NotifyEnemyDied(this);
 
-        if (currentVisual != null)
-            Destroy(currentVisual);
-
         Destroy(gameObject);
-    }
-
-    private void Die()
-    {
-        StartCoroutine(FlashBlackAndDie());
     }
 
     private Transform GetMoveTarget()
     {
-        if (target != null) return target;
-        if (Camera.main != null) return Camera.main.transform;
+        if (target != null)
+            return target;
+        if (Camera.main != null)
+            return Camera.main.transform;
         return null;
     }
 
-    // ----- Visual Management -----
     private void TryFindCylinderRenderer()
     {
         if (cylinderRenderer != null) return;
 
-        // Prefer child named "Cylinder"
         var child = transform.Find("Cylinder");
         if (child != null)
         {
@@ -234,7 +283,6 @@ public class Enemy : GazeInteractable
             if (cylinderRenderer != null) return;
         }
 
-        // Fallback: search children for a renderer whose name contains "cyl" (case-insensitive)
         var rends = GetComponentsInChildren<Renderer>(true);
         foreach (var r in rends)
         {
@@ -247,7 +295,6 @@ public class Enemy : GazeInteractable
             }
         }
 
-        // Last resort: use the first renderer on this GameObject
         var selfR = GetComponent<Renderer>();
         if (selfR != null)
         {
@@ -257,60 +304,99 @@ public class Enemy : GazeInteractable
 
     private void SetupInitialVisual()
     {
-        // Instantiate angelPrefab1 as an independent GameObject (not parented) so it can move at reduced speed.
-        if (angelPrefab1 != null)
-        {
-            if (currentVisual == null)
-            {
-                currentVisual = Instantiate(angelPrefab1);
-                currentVisual.transform.position = transform.position;
-                currentVisual.transform.rotation = transform.rotation;
-                currentVisual.transform.localScale = Vector3.one;
-            }
-
-            UpdateCachedRenderers();
-            return;
-        }
-
-        // Falls kein Prefab konfiguriert ist, nutze vorhandene Renderer
+        currentVisual = null;
         UpdateCachedRenderers();
     }
 
-    private void SwapVisualToPrefab(GameObject prefab)
+    /// <summary>
+    /// Teleportiert zu einem zufälligen Punkt aus den angegebenen Tags.
+    /// Wenn excludeSameName == true werden Kandidaten gefiltert, deren Name gleich currentSpawnName ist.
+    /// Gibt das ausgewählte GameObject zurück (oder null).
+    /// </summary>
+    private GameObject TeleportToRandomWithTagsReturn(string[] tags, bool excludeSameName = true)
+{
+    if (tags == null || tags.Length == 0) return null;
+
+    var allCandidates = new List<GameObject>();
+    foreach (var t in tags)
     {
-        if (prefab == null) return;
+        if (string.IsNullOrEmpty(t)) continue;
+        var gos = GameObject.FindGameObjectsWithTag(t);
+        if (gos != null && gos.Length > 0)
+            allCandidates.AddRange(gos);
+    }
 
-        if (currentVisual != null)
+    if (allCandidates.Count == 0) return null;
+
+    // Filter nach gleichem Namen (wie bisher)
+    List<GameObject> filteredByName = allCandidates;
+    if (excludeSameName && !string.IsNullOrEmpty(currentSpawnName))
+    {
+        filteredByName = new List<GameObject>();
+        foreach (var g in allCandidates)
         {
-            Destroy(currentVisual);
-            currentVisual = null;
+            if (g == null) continue;
+            if (g.name == currentSpawnName) continue;
+            filteredByName.Add(g);
         }
+    }
 
-        currentVisual = Instantiate(prefab);
-        currentVisual.transform.position = transform.position;
-        currentVisual.transform.rotation = transform.rotation;
-        currentVisual.transform.localScale = Vector3.one;
+    if (filteredByName.Count == 0)
+    {
+        Debug.LogWarning($"Teleport: keine Kandidaten nach Ausschluss des gleichen Spawn-Namens ('{currentSpawnName}'). Kein Teleport.", this);
+        return null;
+    }
 
-        UpdateCachedRenderers();
+    // Weiter filtern: keine Kandidaten auswählen, die aktuell von einem anderen Enemy belegt sind
+    var allEnemies = GameObject.FindObjectsOfType<Enemy>();
+    float occupancyRadius = 0.5f;
+    List<GameObject> available = new List<GameObject>();
+    foreach (var g in filteredByName)
+    {
+        if (g == null) continue;
+        bool occupied = false;
+        foreach (var e in allEnemies)
+        {
+            if (e == null) continue;
+            if (e == this) continue; // sich selbst ignorieren
+            if (Vector3.Distance(e.transform.position, g.transform.position) <= occupancyRadius)
+            {
+                occupied = true;
+                break;
+            }
+        }
+        if (!occupied) available.Add(g);
+    }
+
+    if (available.Count == 0)
+    {
+        Debug.LogWarning($"Teleport: keine freien Kandidaten (nach Occupancy-Filter). Kein Teleport.", this);
+        return null;
+    }
+
+    var pick = available[Random.Range(0, available.Count)];
+    transform.position = pick.transform.position;
+    transform.rotation = pick.transform.rotation;
+
+    UpdateCachedRenderers();
+
+    return pick;
+}
+
+    private void TeleportToRandomWithTags(string[] tags)
+    {
+        TeleportToRandomWithTagsReturn(tags);
+    }
+
+    private void TeleportToRandomWithTags(string tagSingle)
+    {
+        TeleportToRandomWithTags(new string[] { tagSingle });
     }
 
     private void UpdateCachedRenderers()
     {
         var list = new List<Renderer>();
-        // renderers that belong to the enemy and its children
         list.AddRange(GetComponentsInChildren<Renderer>(true));
-
-        // include renderers from the independent currentVisual as well
-        if (currentVisual != null)
-        {
-            var vr = currentVisual.GetComponentsInChildren<Renderer>(true);
-            foreach (var r in vr)
-            {
-                if (r != null && !list.Contains(r))
-                    list.Add(r);
-            }
-        }
-
         cachedRenderers = list.ToArray();
     }
 
@@ -318,25 +404,11 @@ public class Enemy : GazeInteractable
     {
         if (cylinderRenderer == null) return;
 
-        // ensure material instance
         var mat = cylinderRenderer.material;
         if (mat == null) return;
 
-        if (hitCount <= 0)
-        {
-            return;
-        }
-        else if (hitCount == 1)
-        {
-            mat.color = Color.yellow;
-        }
-        else if (hitCount == 2)
-        {
-            mat.color = Color.red;
-        }
-        else // 3 or more
-        {
-            mat.color = Color.black;
-        }
+        if (hitCount == 1) mat.color = Color.yellow;
+        else if (hitCount == 2) mat.color = Color.red;
+        else mat.color = Color.black;
     }
 }
