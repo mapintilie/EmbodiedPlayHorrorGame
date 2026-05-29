@@ -5,6 +5,7 @@ using System.Globalization;
 
 [RequireComponent(typeof(Collider))]
 public class GameOverManager : MonoBehaviour
+
 {
     public static GameOverManager Instance { get; private set; }
 
@@ -13,10 +14,11 @@ public class GameOverManager : MonoBehaviour
 
     [Tooltip("Optional: Referenz auf das UI-Text Element named 'Hinweistext'. Falls leer, wird GameObject.Find versucht.")]
     public Text hintText;
-
+    public Font myFont;
     private bool gameOverTriggered = false;
     private int destroyedCount = 0;
     private float startRealtime = 0f;
+
 
     private void Awake()
     {
@@ -179,7 +181,8 @@ public class GameOverManager : MonoBehaviour
         txt.alignment = TextAnchor.MiddleCenter;
         txt.horizontalOverflow = HorizontalWrapMode.Wrap;
         txt.verticalOverflow = VerticalWrapMode.Truncate;
-        txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        txt.font = myFont;
+        txt.material = myFont.material;
         txt.fontSize = 36;
         txt.color = Color.white;
         txt.text = message;
@@ -189,4 +192,6 @@ public class GameOverManager : MonoBehaviour
         tr.offsetMin = Vector2.zero;
         tr.offsetMax = Vector2.zero;
     }
+    
+    
 }
