@@ -1,143 +1,167 @@
-using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class EnemySpawner : MonoBehaviour
 {
     public AudioSource spawnAudiosource;
-    [Tooltip("Enemy prefab that contains the Enemy component.")]
     public GameObject enemyPrefab;
-    [Tooltip("Fallback spawn points if no tagged spawners found.")]
-    public Transform[] spawnPoints;
-    [Tooltip("How many enemies to spawn at start.")]
-    public int initialEnemyCount = 3;
-    [Tooltip("Absolute maximum concurrent enemies allowed (hard cap).")]
+    [Tooltip("Falls keine Tags gefunden werden, nutzt er diese Punkte")]
+    public Transform[] fallbackSpawnPoints; 
+    
+    [Header("Pacing & Limits")]
+    public float initialStartDelay = 4f; 
     public int maxConcurrentEnemies = 3;
-    [Tooltip("Min respawn delay.")]
-    public float respawnDelayMin = 1f;
-    [Tooltip("Max respawn delay.")]
-    public float respawnDelayMax = 5f;
+    
+    public float easyRespawnDelayMin = 3f;
+    public float easyRespawnDelayMax = 6f;
 
-    [Header("Spawn tuning")]
-    [Tooltip("Während der Anfangsphase (vor erstem Kill) ist das Limit so niedrig.")]
-    public int initialPhaseMax = 1;
-    [Tooltip("Standard-Limit nach dem ersten Kill.")]
-    public int normalMaxAfterFirstKill = 2;
-    [Tooltip("Chance (0..1), dass nach dem ersten Kill auch 3 erlaubt werden.")]
-    public float rareThirdChance = 0.12f;
+    public float hardRespawnDelayMin = 1.5f;
+    public float hardRespawnDelayMax = 3.5f;
 
-    private int currentActiveEnemies = 0;
+    private List<Enemy> activeEnemies = new List<Enemy>();
+    
+    // Kugelsichere Timer (statt Coroutines)
+    private float gameStartTimer;
+    private bool gameHasStarted = false;
+    private float spawnTimer = 0f;
 
-    // intern: wurde bereits mindestens ein Enemy getötet?
-    private bool firstKillOccurred = false;
-    // intern: dynamisch ermittelte erlaubte Max-Anzahl nach erstem Kill (geclamp't)
-    private int dynamicMaxConcurrent = -1;
+    private int totalKills = 0;
+    private int enemiesUntilNextBonus = 5; 
 
     private void Start()
     {
-        if (enemyPrefab == null)
+        gameStartTimer = initialStartDelay;
+    }
+
+    private void Update()
+    {
+        // 1. Warte die Startphase ab
+        if (!gameHasStarted)
         {
-            Debug.LogWarning("EnemySpawner: enemyPrefab not set.", this);
+            gameStartTimer -= Time.deltaTime;
+            if (gameStartTimer <= 0f)
+            {
+                gameHasStarted = true;
+                SpawnEnemy(); // Der allererste Gegner
+                SetNextSpawnDelay();
+            }
             return;
         }
 
-        int spawnCount = Mathf.Clamp(initialEnemyCount, 0, GetCurrentAllowedMax());
-        for (int i = 0; i < spawnCount; i++)
-            SpawnEnemy();
+        // 2. Brutales Bereinigen der Liste (falls Gegner gelöscht wurden)
+        activeEnemies.RemoveAll(item => item == null || item.gameObject == null);
+
+        // 3. Spawnen (nur über Timer, kann nicht "stecken bleiben")
+        if (activeEnemies.Count < GetCurrentAllowedMax())
+        {
+            spawnTimer -= Time.deltaTime;
+            if (spawnTimer <= 0f)
+            {
+                SpawnEnemy();
+                SetNextSpawnDelay();
+            }
+        }
+        else
+        {
+            // Halte den Timer oben, falls die Karte voll ist. 
+            // So spawnt nicht instant einer, wenn ein Gegner stirbt.
+            SetNextSpawnDelay();
+        }
     }
 
     public void NotifyEnemyDied(Enemy enemy)
     {
-        // Zähle den Kill für Highscore
         if (GameOverManager.Instance != null)
             GameOverManager.Instance.OnEnemyDestroyed();
 
-        // Markiere erstes Mal Kill und bestimme danach das neue Limit
-        if (!firstKillOccurred)
+        totalKills++;
+        enemiesUntilNextBonus--;
+
+        if (enemiesUntilNextBonus < 0)
         {
-            firstKillOccurred = true;
-            int chosen = normalMaxAfterFirstKill;
-            if (Random.value < rareThirdChance)
-                chosen = Mathf.Max(chosen, 3);
-            // clamp gegen harten Max-Wert
-            dynamicMaxConcurrent = Mathf.Clamp(chosen, 1, Mathf.Max(1, maxConcurrentEnemies));
+            enemiesUntilNextBonus = Random.Range(5, 11); 
         }
-
-        // Ein Enemy ist tot, Platzzähler verringern
-        currentActiveEnemies = Mathf.Max(0, currentActiveEnemies - 1);
-
-        // Wenn jetzt keine Enemies mehr vorhanden sind, sofort einen neuen spawnen
-        if (currentActiveEnemies == 0)
-        {
-            if (GetCurrentAllowedMax() > 0)
-                SpawnEnemy();
-            return;
-        }
-
-        // Starte Respawn nur wenn noch Platz ist (und es nicht der letzte war)
-        if (currentActiveEnemies < GetCurrentAllowedMax())
-            StartCoroutine(RespawnCoroutine());
     }
 
-    private IEnumerator RespawnCoroutine()
+    private int GetCurrentAllowedMax()
     {
-        float delay = Random.Range(respawnDelayMin, respawnDelayMax);
-        yield return new WaitForSeconds(delay);
+        if (totalKills < 2) return 1;
+        
+        int allowedMax = 2;
+        if (enemiesUntilNextBonus == 0) allowedMax = 3;
 
-        if (currentActiveEnemies < GetCurrentAllowedMax())
-            SpawnEnemy();
+        return Mathf.Clamp(allowedMax, 1, maxConcurrentEnemies);
+    }
+
+    private void SetNextSpawnDelay()
+    {
+        spawnTimer = (totalKills < 3) 
+            ? Random.Range(easyRespawnDelayMin, easyRespawnDelayMax) 
+            : Random.Range(hardRespawnDelayMin, hardRespawnDelayMax);
     }
 
     private void SpawnEnemy()
     {
         if (enemyPrefab == null) return;
-
-        // respektiere dynamisches Limit
-        if (currentActiveEnemies >= GetCurrentAllowedMax()) return;
-
-        Vector3 spawnPos = Vector3.zero;
-        Quaternion spawnRot = Quaternion.identity;
+        if (activeEnemies.Count >= GetCurrentAllowedMax()) return;
 
         var spawners = GameObject.FindGameObjectsWithTag("Spawners1");
-        if (spawners != null && spawners.Length > 0)
+        List<Transform> validSpawners = new List<Transform>();
+
+        if (spawners != null)
         {
-            var pick = spawners[Random.Range(0, spawners.Length)];
-            spawnPos = pick.transform.position;
-            spawnRot = pick.transform.rotation;
-        }
-        else if (spawnPoints != null && spawnPoints.Length > 0)
-        {
-            var pick = spawnPoints[Random.Range(0, spawnPoints.Length)];
-            spawnPos = pick.position;
-            spawnRot = pick.rotation;
-        }
-        else
-        {
-            Debug.LogWarning("EnemySpawner: No spawn locations available.", this);
-            return;
+            foreach (var sp in spawners)
+            {
+                if (IsRoomFree(sp.transform.position))
+                    validSpawners.Add(sp.transform);
+            }
         }
 
-        GameObject go = Instantiate(enemyPrefab, spawnPos, spawnRot);
-        Enemy spawned = go.GetComponent<Enemy>();
-        if (spawned != null)
-            spawned.Spawner = this;
-        else
-            Debug.LogWarning("Spawned object does not have an Enemy component.", go);
+        // Fallback 1: Wenn alle Räume als "voll" gelten, nimm einfach alle möglichen Spawner
+        if (validSpawners.Count == 0 && spawners != null && spawners.Length > 0) 
+        {
+            foreach(var sp in spawners) validSpawners.Add(sp.transform);
+        }
 
-        currentActiveEnemies++;
+        // Fallback 2: Wenn es die Tags gar nicht gibt, nutze die manuellen Punkte
+        if (validSpawners.Count == 0 && fallbackSpawnPoints != null && fallbackSpawnPoints.Length > 0)
+        {
+            validSpawners.AddRange(fallbackSpawnPoints);
+        }
 
-        if (spawnAudiosource != null)
-            spawnAudiosource.Play();
+        if (validSpawners.Count > 0)
+        {
+            var pick = validSpawners[Random.Range(0, validSpawners.Count)];
+            GameObject go = Instantiate(enemyPrefab, pick.position, pick.rotation);
+            Enemy spawned = go.GetComponent<Enemy>();
+            
+            if (spawned != null)
+            {
+                spawned.Spawner = this;
+                activeEnemies.Add(spawned);
+            }
+
+            if (spawnAudiosource != null) spawnAudiosource.Play();
+        }
     }
 
-    private int GetCurrentAllowedMax()
+    private bool IsRoomFree(Vector3 candidatePos)
     {
-        if (!firstKillOccurred)
-            return Mathf.Clamp(initialPhaseMax, 1, Mathf.Max(1, maxConcurrentEnemies));
+        Transform playerTr = Camera.main != null ? Camera.main.transform : null;
+        if (playerTr == null) return true;
 
-        if (dynamicMaxConcurrent > 0)
-            return Mathf.Clamp(dynamicMaxConcurrent, 1, Mathf.Max(1, maxConcurrentEnemies));
+        Vector3 toCandidate = (candidatePos - playerTr.position);
+        toCandidate.y = 0f;
 
-        // fallback
-        return Mathf.Clamp(normalMaxAfterFirstKill, 1, Mathf.Max(1, maxConcurrentEnemies));
+        foreach (var e in activeEnemies)
+        {
+            if (e == null) continue;
+            Vector3 toExisting = (e.transform.position - playerTr.position);
+            toExisting.y = 0f;
+
+            if (Vector3.Angle(toCandidate, toExisting) < 75f) 
+                return false; 
+        }
+        return true;
     }
 }
