@@ -2,11 +2,11 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// UI-Overlay mit schwarzem Bildschirm und einem durchsichtigen Kreis an der Mausposition.
-/// Nutzt ausschließlich die Mausposition; ohne Material wird die Overlay-Farbe direkt gesetzt.
+/// UI-Overlay mit schwarzem Bildschirm und einem durchsichtigen Kreis.
 /// </summary>
 public class ViewRestriction : GazeInteractable
 {
+    [Header("Visual Settings")]
     [Tooltip("Material using the HoleMask shader (optional). If null the shader will be found by name.")]
     public Material maskMaterial;
 
@@ -16,17 +16,23 @@ public class ViewRestriction : GazeInteractable
     [Tooltip("Farbe des Overlays (Alpha steuert die Abdunkelung).")]
     public Color overlayColor = new Color(0f, 0f, 0f, 0.8f);
 
+    [Header("Tracking Settings")]
+    [Tooltip("How smoothly the hole follows the gaze (prevents eye-tracking jitter). Higher is faster.")]
+    public float followSpeed = 15f;
+
     [Tooltip("Aktiviere Debug-Logs.")]
     public bool debugGaze = false;
 
     private Material runtimeMaterial;
     private Canvas canvas;
     private RawImage rawImage;
+    private Vector2 currentScreenPosition;
 
     void Start()
     {
         CreateOverlay();
         ApplyMaterialProperties();
+        currentScreenPosition = new Vector2(Screen.width / 2f, Screen.height / 2f); // Start in center
     }
 
     void OnDestroy()
@@ -37,8 +43,38 @@ public class ViewRestriction : GazeInteractable
 
     void Update()
     {
-        Vector2 mouse = Input.mousePosition;
-        UpdateMaterialWithMouse(mouse);
+        // 1. Hole die Zielposition (Maus oder Eye Tracker)
+        Vector2 targetPosition = GetGazePosition();
+
+        // 2. Interpoliere die Position, um das natürliche Zittern der Augen auszugleichen
+        currentScreenPosition = Vector2.Lerp(currentScreenPosition, targetPosition, Time.deltaTime * followSpeed);
+
+        // 3. Aktualisiere den Shader
+        UpdateMaterialWithPosition(currentScreenPosition);
+    }
+
+    /// <summary>
+    /// Hier wird die X/Y Bildschirmkoordinate abgerufen.
+    /// </summary>
+    private Vector2 GetGazePosition()
+    {
+        // 1. Get the 3D gaze data from the Tobii XR SDK
+        var eyeData = Tobii.XR.TobiiXR.GetEyeTrackingData(Tobii.XR.TobiiXR_TrackingSpace.World);
+        
+        // 2. Check if the eye tracker can currently see your eyes
+        if (eyeData.GazeRay.IsValid)
+        {
+            // 3. Take the 3D direction you are looking, project it 10 meters forward...
+            Vector3 lookPointIn3D = eyeData.GazeRay.Origin + (eyeData.GazeRay.Direction * 10f);
+            
+            // 4. ...and translate that 3D point into a 2D pixel coordinate on your screen/camera
+            Vector2 screenPos = Camera.main.WorldToScreenPoint(lookPointIn3D);
+            
+            return screenPos;
+        }
+
+        // Fallback: If you blink, look away, or the tracker disconnects, use the mouse
+        return Input.mousePosition; 
     }
 
     private void CreateOverlay()
@@ -75,7 +111,7 @@ public class ViewRestriction : GazeInteractable
         if (runtimeMaterial != null)
         {
             rawImage.material = runtimeMaterial;
-            rawImage.color = Color.white; // Material steuert Overlay-Farbe/Alpha
+            rawImage.color = Color.white;
         }
         else
         {
@@ -100,28 +136,27 @@ public class ViewRestriction : GazeInteractable
         runtimeMaterial.SetFloat("_Aspect", (float)Screen.width / Mathf.Max(1f, Screen.height));
     }
 
-    private void UpdateMaterialWithMouse(Vector2 mousePosition)
+    private void UpdateMaterialWithPosition(Vector2 screenPosition)
     {
         if (runtimeMaterial == null)
             return;
 
-        // aktualisiere Radius in jedem Frame (falls Fenstergröße sich ändert)
         float normalizedRadius = holeRadiusPixels / Mathf.Max(1f, Screen.height);
         runtimeMaterial.SetFloat("_HoleRadius", normalizedRadius);
         runtimeMaterial.SetColor("_OverlayColor", overlayColor);
         runtimeMaterial.SetFloat("_Aspect", (float)Screen.width / Mathf.Max(1f, Screen.height));
 
-        Vector2 center = new Vector2(mousePosition.x / Screen.width, mousePosition.y / Screen.height);
+        Vector2 center = new Vector2(screenPosition.x / Screen.width, screenPosition.y / Screen.height);
         center.x = Mathf.Clamp01(center.x);
         center.y = Mathf.Clamp01(center.y);
 
         runtimeMaterial.SetVector("_HoleCenter", new Vector4(center.x, center.y, 0f, 0f));
 
         if (debugGaze)
-            Debug.Log($"[ViewRestriction] Mouse -> screen={mousePosition} normalized={center}");
+            Debug.Log($"[ViewRestriction] Target -> screen={screenPosition} normalized={center}");
     }
 
-    // Optional: leere Gaze-Callbacks, um Basisklasse nicht zu stören
+    // Leere Callbacks, um die Basisklasse nicht zu stören (da wir die kontinuierliche Position brauchen, nicht die Trigger)
     protected override void OnGazeEnterCallback() { }
     protected override void OnGazeStayCallback() { }
     protected override void OnGazeFocusedCallback() { }
