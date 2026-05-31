@@ -1,4 +1,5 @@
 using System;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class GazeCameraController : MonoBehaviour
@@ -35,11 +36,11 @@ public class GazeCameraController : MonoBehaviour
     private void Update()
     {
         // 1. Check input for 90-degree snap turns
-        if (Input.GetKeyDown(KeyCode.RightArrow))
+        if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
         {
             TurnBase(90f);
         }
-        else if (Input.GetKeyDown(KeyCode.LeftArrow))
+        else if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A))
         {
             TurnBase(-90f);
         }

@@ -36,7 +36,6 @@ public class GazeScreenmove : GazeInteractable
         }
 
         cameraController.SetTargetAngles(pitch, yaw);
-        Debug.Log($"Gaze Enter: Bewege Kamera zu Pitch {pitch}, Yaw {yaw}");
     }
 
     protected override void OnGazeExitCallback()
@@ -46,6 +45,5 @@ public class GazeScreenmove : GazeInteractable
         // kamera auf die position einfrieren
         cameraController.StopMovement();
         
-        Debug.Log($"Gaze Exit auf {gameObject.name}: Bewegung gestoppt.");
     }
 }
