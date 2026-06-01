@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Globalization;
 using System.Collections; // WICHTIG für den Jumpscare-Timer
+using UnityEngine.SceneManagement;
 
 [RequireComponent(typeof(Collider))]
 public class GameOverManager : MonoBehaviour
@@ -112,6 +113,14 @@ public class GameOverManager : MonoBehaviour
 
         // Warte während des Jumpscares
         yield return new WaitForSeconds(jumpscareDuration);
+
+        float elapsed = Time.realtimeSinceStartup - startRealtime;
+
+        GameStats.AngelsDestroyed = destroyedCount;
+        GameStats.SurvivalTime = elapsed;
+
+        SceneManager.LoadScene("GameOverScreen");
+        yield break;
 
         // STUFE 2: Nur "You Died" anzeigen
         string initialMessage = "You Died";
