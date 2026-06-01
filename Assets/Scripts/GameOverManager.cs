@@ -120,41 +120,7 @@ public class GameOverManager : MonoBehaviour
         GameStats.SurvivalTime = elapsed;
 
         SceneManager.LoadScene("GameOverScreen");
-        yield break;
-
-        // STUFE 2: Nur "You Died" anzeigen
-        string initialMessage = "You Died";
-        if (!TryShowHintText(initialMessage))
-        {
-            CreateBlackOverlayWithText(initialMessage);
-        }
-
-        // Warte in der "You Died"-Dunkelheit
-        yield return new WaitForSeconds(youDiedScreenDuration);
-
-        // STUFE 3: Der eigentliche Statistik-Screen (Infos geladen!)
-        float elapsed = Time.realtimeSinceStartup - startRealtime;
-        string timeStr = FormatTime(elapsed);
-        string detailedMessage = $"Game Over\n\nAngels destroyed: {destroyedCount}\nTime: {timeStr}";
-
-        // Text aktualisieren oder neues Overlay drüberlegen
-        if (hintText != null && hintText.gameObject.activeInHierarchy)
-        {
-            hintText.text = detailedMessage;
-        }
-        else
-        {
-            // Wenn das dynamische Canvas genutzt wurde, löschen wir das alte "You Died" 
-            // und spawnen das neue mit den Statistiken
-            GameObject oldCanvas = GameObject.Find("GameOverCanvas");
-            if (oldCanvas != null) Destroy(oldCanvas);
-            
-            CreateBlackOverlayWithText(detailedMessage);
-        }
-
-        // Erst ganz am Ende, wenn alles steht, das Spiel einfrieren
-        if (pauseTimeOnGameOver)
-            Time.timeScale = 0f;
+        
     }
 
     private bool TryShowHintText(string message)

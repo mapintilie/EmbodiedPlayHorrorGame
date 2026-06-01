@@ -1,4 +1,4 @@
-    using UnityEngine;
+using UnityEngine;
 using TMPro;
 
 public class GameTimer : MonoBehaviour
@@ -10,9 +10,13 @@ public class GameTimer : MonoBehaviour
     {
         timeElapsed += Time.deltaTime;
 
-        int minutes = Mathf.FloorToInt(timeElapsed / 60);
-        int seconds = Mathf.FloorToInt(timeElapsed % 60);
+        int minutes = Mathf.FloorToInt(timeElapsed / 60f);
+        float seconds = timeElapsed - minutes * 60f;
 
-        timerText.text = minutes.ToString("00") + ":" + seconds.ToString("00");
+        timerText.text = string.Format(
+            "{0:00}:{1:00.00}",
+            minutes,
+            seconds
+        );
     }
 }

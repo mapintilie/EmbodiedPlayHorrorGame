@@ -1,11 +1,11 @@
 using UnityEngine;
-using UnityEngine.UI;
+using TMPro;
 using System.Globalization;
 
 public class GameOverScreenManager : MonoBehaviour
 {
-    public Text angelsDestroyedText;
-    public Text timeText;
+    public TMP_Text angelsDestroyedText;
+    public TMP_Text timeText;
 
     void Start()
     {
