@@ -24,6 +24,8 @@ public class GameOverManager : MonoBehaviour
     private bool gameOverTriggered = false;
     private int destroyedCount = 0;
     private float startRealtime = 0f;
+    
+    public AudioSource gameoverSound;
 
     private void Awake()
     {
@@ -92,6 +94,7 @@ public class GameOverManager : MonoBehaviour
     private void TriggerGameOver(Enemy killerEnemy)
     {
         gameOverTriggered = true;
+        gameoverSound.Play();
         StartCoroutine(GameOverSequence(killerEnemy));
     }
 

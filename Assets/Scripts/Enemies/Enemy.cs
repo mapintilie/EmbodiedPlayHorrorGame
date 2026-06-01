@@ -44,6 +44,10 @@ public class Enemy : GazeInteractable
     private Renderer[] cachedRenderers;
     private string currentSpawnName = null;
     private NavMeshAgent agent;
+    
+    [Header("Audio")]
+    [Tooltip("Shared audio clip used for spawn, hit and death. Assign from the spawner or per-enemy.")]
+    public AudioSource spawnSound;
 
     private void Start()
     {
@@ -108,7 +112,14 @@ public class Enemy : GazeInteractable
 
         canBeLookedAt = false;
         gazeHits++;
-        
+
+        // Play shared hit sound (same as spawnSound)
+        if (spawnSound != null)
+        {
+            //AudioSource.PlayClipAtPoint(spawnSound.clip, transform.position, spawnSoundVolume);
+            spawnSound.Play();
+        }
+
         UpdateVisualPose(gazeHits);
 
         if (gazeHits >= 3) StartCoroutine(DieSequence());
@@ -159,12 +170,19 @@ public class Enemy : GazeInteractable
 
         yield return new WaitForSeconds(freezeDuration);
 
-        // NEW: Apply the scary materials on the 3rd hit (replaces the old black color code)
+        // Play shared death sound (same as spawnSound) and apply the scary materials on the 3rd hit
+        if (spawnSound != null)
+        {
+            spawnSound.Play();
+        }
+
         ApplyDeathMaterials();
 
         // NOTE: Change this 0.2f to a larger number (like 1.5f) if you want the player 
         // to actually see the scary death materials before the enemy is destroyed!
         yield return new WaitForSeconds(0.3f);
+        
+        
 
         Spawner?.NotifyEnemyDied(this);
         Destroy(gameObject);

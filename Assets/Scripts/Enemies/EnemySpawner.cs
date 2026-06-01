@@ -3,7 +3,11 @@ using UnityEngine;
 
 public class EnemySpawner : MonoBehaviour
 {
-    public AudioSource spawnAudiosource;
+    [Header("Audio")]
+    [Tooltip("Optional audio clip played when an enemy spawns. Played at spawn position.")]
+    public AudioSource spawnSound;
+
+    
     public GameObject enemyPrefab;
     [Tooltip("Falls keine Tags gefunden werden, nutzt er diese Punkte")]
     public Transform[] fallbackSpawnPoints; 
@@ -145,10 +149,15 @@ public class EnemySpawner : MonoBehaviour
             if (spawned != null)
             {
                 spawned.Spawner = this;
+                
                 activeEnemies.Add(spawned);
             }
 
-            if (spawnAudiosource != null) spawnAudiosource.Play();
+            // Play spawn sound at the chosen spawn point (if provided)
+            if (spawnSound != null)
+            {
+                spawnSound.Play();
+            }
         }
     }
 

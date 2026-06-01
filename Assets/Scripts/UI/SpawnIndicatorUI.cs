@@ -30,6 +30,7 @@ public class SpawnIndicatorUI : MonoBehaviour
     private Transform trackedTransform;
     private Vector3 trackedWorldPos;
     private Camera mainCam;
+    
 
     private void Awake()
     {
