@@ -20,13 +20,15 @@ public class EnemySpawner : MonoBehaviour
 
     private List<Enemy> activeEnemies = new List<Enemy>();
     
-    // Kugelsichere Timer (statt Coroutines)
     private float gameStartTimer;
     private bool gameHasStarted = false;
     private float spawnTimer = 0f;
 
     private int totalKills = 0;
     private int enemiesUntilNextBonus = 5; 
+
+    // --- DIAGNOSTIC VARIABLE ---
+    private string lastError = "Waiting to start...";
 
     private void Start()
     {
@@ -35,23 +37,22 @@ public class EnemySpawner : MonoBehaviour
 
     private void Update()
     {
-        // 1. Warte die Startphase ab
         if (!gameHasStarted)
         {
             gameStartTimer -= Time.deltaTime;
             if (gameStartTimer <= 0f)
             {
                 gameHasStarted = true;
-                SpawnEnemy(); // Der allererste Gegner
+                SpawnEnemy(); 
                 SetNextSpawnDelay();
             }
             return;
         }
 
-        // 2. Brutales Bereinigen der Liste (falls Gegner gelöscht wurden)
-        activeEnemies.RemoveAll(item => item == null || item.gameObject == null);
+        // THE GHOST KILLER: 
+        // This now strictly removes enemies if they are destroyed OR if another script disabled them!
+        activeEnemies.RemoveAll(item => item == null || item.gameObject == null || !item.gameObject.activeInHierarchy);
 
-        // 3. Spawnen (nur über Timer, kann nicht "stecken bleiben")
         if (activeEnemies.Count < GetCurrentAllowedMax())
         {
             spawnTimer -= Time.deltaTime;
@@ -63,8 +64,7 @@ public class EnemySpawner : MonoBehaviour
         }
         else
         {
-            // Halte den Timer oben, falls die Karte voll ist. 
-            // So spawnt nicht instant einer, wenn ein Gegner stirbt.
+            // Keep timer frozen so it doesn't instantly spawn when an enemy dies
             SetNextSpawnDelay();
         }
     }
@@ -102,8 +102,8 @@ public class EnemySpawner : MonoBehaviour
 
     private void SpawnEnemy()
     {
-        if (enemyPrefab == null) return;
-        if (activeEnemies.Count >= GetCurrentAllowedMax()) return;
+        if (enemyPrefab == null) { lastError = "ERROR: No Prefab assigned!"; return; }
+        if (activeEnemies.Count >= GetCurrentAllowedMax()) { lastError = "Limit Reached"; return; }
 
         var spawners = GameObject.FindGameObjectsWithTag("Spawners1");
         List<Transform> validSpawners = new List<Transform>();
@@ -117,13 +117,11 @@ public class EnemySpawner : MonoBehaviour
             }
         }
 
-        // Fallback 1: Wenn alle Räume als "voll" gelten, nimm einfach alle möglichen Spawner
         if (validSpawners.Count == 0 && spawners != null && spawners.Length > 0) 
         {
             foreach(var sp in spawners) validSpawners.Add(sp.transform);
         }
 
-        // Fallback 2: Wenn es die Tags gar nicht gibt, nutze die manuellen Punkte
         if (validSpawners.Count == 0 && fallbackSpawnPoints != null && fallbackSpawnPoints.Length > 0)
         {
             validSpawners.AddRange(fallbackSpawnPoints);
@@ -139,9 +137,18 @@ public class EnemySpawner : MonoBehaviour
             {
                 spawned.Spawner = this;
                 activeEnemies.Add(spawned);
+                lastError = "Spawn Successful";
+            }
+            else
+            {
+                lastError = "ERROR: Prefab is missing the Enemy script!";
             }
 
             if (spawnAudiosource != null) spawnAudiosource.Play();
+        }
+        else
+        {
+            lastError = "ERROR: Absolutely no spawn points found!";
         }
     }
 
@@ -163,5 +170,34 @@ public class EnemySpawner : MonoBehaviour
                 return false; 
         }
         return true;
+    }
+
+    // ==========================================
+    // THE X-RAY OVERLAY
+    // ==========================================
+    private void OnGUI()
+    {
+        GUI.Box(new Rect(10, 10, 450, 250), "");
+        GUILayout.BeginArea(new Rect(20, 20, 430, 230));
+        
+        GUILayout.Label($"<color=yellow><size=16><b>SPAWNER DIAGNOSTICS</b></size></color>");
+        GUILayout.Label($"Game Started: {gameHasStarted}");
+        GUILayout.Label($"Total Kills: {totalKills}");
+        GUILayout.Label($"Active Limit: {GetCurrentAllowedMax()} (Next 3-Enemy wave in {enemiesUntilNextBonus} kills)");
+        GUILayout.Label($"Timer until next spawn: {Mathf.Max(0, spawnTimer):F1}s");
+        GUILayout.Label($"Last Spawner Status: <color=cyan>{lastError}</color>");
+        GUILayout.Space(10);
+        
+        GUILayout.Label($"<b>Active Enemies in memory: {activeEnemies.Count}</b>");
+        for (int i = 0; i < activeEnemies.Count; i++)
+        {
+            if (activeEnemies[i] != null)
+            {
+                Vector3 pos = activeEnemies[i].transform.position;
+                GUILayout.Label($"- Enemy {i}: Pos({pos.x:F1}, {pos.y:F1}, {pos.z:F1}) | Active: {activeEnemies[i].gameObject.activeInHierarchy}");
+            }
+        }
+        
+        GUILayout.EndArea();
     }
 }
