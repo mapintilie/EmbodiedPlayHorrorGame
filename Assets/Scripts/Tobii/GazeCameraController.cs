@@ -11,7 +11,7 @@ public class GazeCameraController : MonoBehaviour
     [Tooltip("When to start panning (0.25 = outer 25% of the screen).")]
     [SerializeField] private float edgeThreshold = 0.25f;
     [Tooltip("How fast the camera pushes when looking at the edge.")]
-    [SerializeField] private float edgePanSpeed = 45f;
+    [SerializeField] private float edgePanSpeed = 55f;
 
     [Header("Gaze Settings")]
     [SerializeField] private float transitionTime = 0.8f;
