@@ -26,8 +26,9 @@ public class Enemy : GazeInteractable
     public string spawnTagStage2 = "Spawners2";
     public string spawnTagStage3 = "Spawners3";
 
-    [Header("Cylinder (optional)")]
-    public Renderer cylinderRenderer;
+    [Header("Visual Poses")]
+    [Tooltip("Ziehe hier die 3 Engel-Kindobjekte in der richtigen Reihenfolge rein (0=Start, 1=1xHit, 2=2xHit)")]
+    public GameObject[] angelPoses;
 
     private bool canMove;
     private bool isFrozen;
@@ -52,8 +53,8 @@ public class Enemy : GazeInteractable
             agent.updateRotation = true;
         }
 
-        TryFindCylinderRenderer();
-        UpdateCachedRenderers();
+        // Setze sofort die allererste Pose (0 Hits)
+        UpdateVisualPose(0);
 
         StartCoroutine(EnableMovementAfterDelay());
         GazeCameraController.OnRoomChanged += OnRoomChanged;
@@ -73,7 +74,7 @@ public class Enemy : GazeInteractable
     {
         base.Update();
         
-        // Anti-Geister-Sicherung: Fällt er durch den Boden, zerstört er sich sofort selbst
+        // Anti-Geister-Sicherung
         if (transform.position.y < -50f)
         {
             Destroy(gameObject);
@@ -104,7 +105,8 @@ public class Enemy : GazeInteractable
         canBeLookedAt = false;
         gazeHits++;
         
-        ApplyCylinderColorForHit(gazeHits);
+        // Aktualisiere sofort die Pose (das Modell)
+        UpdateVisualPose(gazeHits);
 
         if (gazeHits >= 3) StartCoroutine(DieSequence());
         else StartCoroutine(FreezeAndTeleportSequence());
@@ -137,8 +139,6 @@ public class Enemy : GazeInteractable
         isFrozen = false;
         if (agent != null && agent.isOnNavMesh) agent.isStopped = false;
 
-        // SICHERHEITSSYSTEM: Selbst wenn "OnRoomChanged" nie gefeuert wird 
-        // (z.B. weil der Spieler sich nicht dreht), wird er nach 1 Sekunde wieder verwundbar!
         yield return new WaitForSeconds(1f);
         canBeLookedAt = true;
     }
@@ -158,6 +158,7 @@ public class Enemy : GazeInteractable
 
         yield return new WaitForSeconds(freezeDuration);
 
+        // Die schwarze Todesschattierung funktioniert weiterhin auf dem aktuell aktiven Modell!
         if (cachedRenderers != null)
         {
             foreach (var r in cachedRenderers)
@@ -249,25 +250,38 @@ public class Enemy : GazeInteractable
             transform.rotation = pick.transform.rotation;
         }
 
-        UpdateCachedRenderers();
         return pick;
     }
 
-    private void TryFindCylinderRenderer() {
-        if (cylinderRenderer != null) return;
-        foreach (var r in GetComponentsInChildren<Renderer>(true)) {
-            if (r != null && r.gameObject.name.ToLowerInvariant().Contains("cyl")) { cylinderRenderer = r; return; }
+    // ==========================================
+    // DAS NEUE MODEL-SWAP SYSTEM
+    // ==========================================
+    private void UpdateVisualPose(int hits)
+    {
+        if (angelPoses == null || angelPoses.Length == 0) return;
+
+        // 1. Schalte ALLE Posen erstmal unsichtbar
+        foreach (var pose in angelPoses)
+        {
+            if (pose != null) pose.SetActive(false);
         }
-        cylinderRenderer = GetComponent<Renderer>();
+
+        // 2. Finde die richtige Pose heraus (0 Hits = Index 0, 1 Hit = Index 1, 2 Hits = Index 2)
+        int index = Mathf.Clamp(hits, 0, angelPoses.Length - 1);
+        
+        // 3. Schalte nur die richtige Pose sichtbar
+        if (angelPoses[index] != null)
+        {
+            angelPoses[index].SetActive(true);
+        }
+
+        // 4. Lese die Renderer neu ein, damit der Gegner beim Tod immer noch schwarz werden kann
+        UpdateCachedRenderers();
     }
     
-    private void UpdateCachedRenderers() { cachedRenderers = GetComponentsInChildren<Renderer>(true); }
-
-    private void ApplyCylinderColorForHit(int hitCount)
-    {
-        if (cylinderRenderer == null || cylinderRenderer.material == null) return;
-        if (hitCount == 1) cylinderRenderer.material.color = Color.yellow;
-        else if (hitCount == 2) cylinderRenderer.material.color = Color.red;
-        else cylinderRenderer.material.color = Color.black;
+    private void UpdateCachedRenderers() 
+    { 
+        // Lese nur die Renderer von Objekten ein, die gerade "an" sind
+        cachedRenderers = GetComponentsInChildren<Renderer>(false); 
     }
 }
