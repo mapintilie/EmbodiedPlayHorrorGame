@@ -329,7 +329,7 @@ AudioSource:
   m_audioClip: {fileID: 8300000, guid: a1f3a31727f9eb8478b1e55630faa358, type: 3}
   m_Resource: {fileID: 8300000, guid: a1f3a31727f9eb8478b1e55630faa358, type: 3}
   m_PlayOnAwake: 0
-  m_Volume: 0.5
+  m_Volume: 0.4
   m_Pitch: 1
   Loop: 0
   Mute: 0
@@ -3241,7 +3241,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c2060ad66c13744af89d45289b2266b8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  spawnSound: {fileID: 0}
+  spawnSound: {fileID: 2023245285}
   enemyPrefab: {fileID: 853545692942053181, guid: 0fdb5b44d3b563b4087a8af26ecbad09, type: 3}
   fallbackSpawnPoints: []
   initialStartDelay: 4

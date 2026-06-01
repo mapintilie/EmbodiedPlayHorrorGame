@@ -149,6 +149,7 @@ public class EnemySpawner : MonoBehaviour
             if (spawned != null)
             {
                 spawned.Spawner = this;
+                spawned.spawnSound = spawnSound;  // Assign the audio source to the enemy
                 
                 activeEnemies.Add(spawned);
             }

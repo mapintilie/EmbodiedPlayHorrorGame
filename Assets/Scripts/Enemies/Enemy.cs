@@ -112,11 +112,10 @@ public class Enemy : GazeInteractable
 
         canBeLookedAt = false;
         gazeHits++;
-
-        // Play shared hit sound (same as spawnSound)
+        
+        
         if (spawnSound != null)
         {
-            //AudioSource.PlayClipAtPoint(spawnSound.clip, transform.position, spawnSoundVolume);
             spawnSound.Play();
         }
 
