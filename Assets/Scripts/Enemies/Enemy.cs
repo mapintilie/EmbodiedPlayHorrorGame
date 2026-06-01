@@ -36,6 +36,9 @@ public class Enemy : GazeInteractable
     private int gazeHits = 0;
     private bool isDying = false;
 
+    // NEW: Stores the random speed variation for the current room
+    private float currentRandomSpeedModifier = 1f;
+
     private Renderer[] cachedRenderers;
     private string currentSpawnName = null;
     private NavMeshAgent agent;
@@ -45,7 +48,6 @@ public class Enemy : GazeInteractable
         agent = GetComponent<NavMeshAgent>();
         if (agent != null)
         {
-            agent.speed = moveSpeed * movementSpeedMultiplier;
             agent.angularSpeed = 720f;
             agent.acceleration = 8f;
             if (Enum.TryParse("MediumQuality", true, out ObstacleAvoidanceType chosen)) agent.obstacleAvoidanceType = chosen;
@@ -53,8 +55,11 @@ public class Enemy : GazeInteractable
             agent.updateRotation = true;
         }
 
-        // Setze sofort die allererste Pose (0 Hits)
+        // Set the very first pose (0 Hits)
         UpdateVisualPose(0);
+        
+        // Randomize speed for Stage 1
+        RandomizeSpeed(1);
 
         StartCoroutine(EnableMovementAfterDelay());
         GazeCameraController.OnRoomChanged += OnRoomChanged;
@@ -74,7 +79,7 @@ public class Enemy : GazeInteractable
     {
         base.Update();
         
-        // Anti-Geister-Sicherung
+        // Anti-Ghosting security
         if (transform.position.y < -50f)
         {
             Destroy(gameObject);
@@ -83,7 +88,9 @@ public class Enemy : GazeInteractable
 
         if (agent != null && agent.isOnNavMesh)
         {
-            agent.speed = moveSpeed * movementSpeedMultiplier;
+            // APPLY THE RANDOM MODIFIER HERE
+            agent.speed = moveSpeed * movementSpeedMultiplier * currentRandomSpeedModifier;
+            
             bool shouldMove = canMove && !isFrozen && !isDying;
             agent.isStopped = !shouldMove;
 
@@ -105,7 +112,6 @@ public class Enemy : GazeInteractable
         canBeLookedAt = false;
         gazeHits++;
         
-        // Aktualisiere sofort die Pose (das Modell)
         UpdateVisualPose(gazeHits);
 
         if (gazeHits >= 3) StartCoroutine(DieSequence());
@@ -125,6 +131,9 @@ public class Enemy : GazeInteractable
         {
             GameObject picked = TeleportToValidRoom(new string[] { spawnTagStage2 });
             if (picked != null) currentSpawnName = picked.name;
+            
+            // Randomize speed for Stage 2
+            RandomizeSpeed(2);
         }
         else if (gazeHits == 2)
         {
@@ -134,6 +143,9 @@ public class Enemy : GazeInteractable
                 currentSpawnName = picked.name;
                 if (picked.CompareTag(spawnTagStage3)) target = Camera.main != null ? Camera.main.transform : target;
             }
+            
+            // Randomize speed for Stage 3 (Cap at 7%)
+            RandomizeSpeed(3);
         }
 
         isFrozen = false;
@@ -141,6 +153,23 @@ public class Enemy : GazeInteractable
 
         yield return new WaitForSeconds(1f);
         canBeLookedAt = true;
+    }
+
+    // ==========================================
+    // NEW: SPEED RANDOMIZER
+    // ==========================================
+    private void RandomizeSpeed(int stage)
+    {
+        if (stage == 3)
+        {
+            // Stage 3: Between 5% slower (0.95) and 7% faster (1.07)
+            currentRandomSpeedModifier = Random.Range(0.95f, 1.07f);
+        }
+        else
+        {
+            // Stage 1 & 2: Between 5% slower (0.95) and 15% faster (1.15)
+            currentRandomSpeedModifier = Random.Range(0.95f, 1.15f);
+        }
     }
 
     private IEnumerator EnableMovementAfterDelay()
@@ -158,7 +187,6 @@ public class Enemy : GazeInteractable
 
         yield return new WaitForSeconds(freezeDuration);
 
-        // Die schwarze Todesschattierung funktioniert weiterhin auf dem aktuell aktiven Modell!
         if (cachedRenderers != null)
         {
             foreach (var r in cachedRenderers)
@@ -253,35 +281,27 @@ public class Enemy : GazeInteractable
         return pick;
     }
 
-    // ==========================================
-    // DAS NEUE MODEL-SWAP SYSTEM
-    // ==========================================
     private void UpdateVisualPose(int hits)
     {
         if (angelPoses == null || angelPoses.Length == 0) return;
 
-        // 1. Schalte ALLE Posen erstmal unsichtbar
         foreach (var pose in angelPoses)
         {
             if (pose != null) pose.SetActive(false);
         }
 
-        // 2. Finde die richtige Pose heraus (0 Hits = Index 0, 1 Hit = Index 1, 2 Hits = Index 2)
         int index = Mathf.Clamp(hits, 0, angelPoses.Length - 1);
         
-        // 3. Schalte nur die richtige Pose sichtbar
         if (angelPoses[index] != null)
         {
             angelPoses[index].SetActive(true);
         }
 
-        // 4. Lese die Renderer neu ein, damit der Gegner beim Tod immer noch schwarz werden kann
         UpdateCachedRenderers();
     }
     
     private void UpdateCachedRenderers() 
     { 
-        // Lese nur die Renderer von Objekten ein, die gerade "an" sind
         cachedRenderers = GetComponentsInChildren<Renderer>(false); 
     }
 }
