@@ -27,8 +27,12 @@ public class Enemy : GazeInteractable
     public string spawnTagStage3 = "Spawners3";
 
     [Header("Visual Poses")]
-    [Tooltip("Ziehe hier die 3 Engel-Kindobjekte in der richtigen Reihenfolge rein (0=Start, 1=1xHit, 2=2xHit)")]
+    [Tooltip("Drag the 3 Angel child objects here (0=Start, 1=1xHit, 2=2xHit)")]
     public GameObject[] angelPoses;
+    
+    [Header("Stage 3 Visuals")]
+    [Tooltip("Drag the new materials for Stage 3 here. If the angel has a Head and Body material, add BOTH here in the exact same order as the original!")]
+    public Material[] stage3Materials;
 
     private bool canMove;
     private bool isFrozen;
@@ -36,9 +40,7 @@ public class Enemy : GazeInteractable
     private int gazeHits = 0;
     private bool isDying = false;
 
-    // NEW: Stores the random speed variation for the current room
     private float currentRandomSpeedModifier = 1f;
-
     private Renderer[] cachedRenderers;
     private string currentSpawnName = null;
     private NavMeshAgent agent;
@@ -55,10 +57,7 @@ public class Enemy : GazeInteractable
             agent.updateRotation = true;
         }
 
-        // Set the very first pose (0 Hits)
         UpdateVisualPose(0);
-        
-        // Randomize speed for Stage 1
         RandomizeSpeed(1);
 
         StartCoroutine(EnableMovementAfterDelay());
@@ -79,7 +78,6 @@ public class Enemy : GazeInteractable
     {
         base.Update();
         
-        // Anti-Ghosting security
         if (transform.position.y < -50f)
         {
             Destroy(gameObject);
@@ -88,7 +86,6 @@ public class Enemy : GazeInteractable
 
         if (agent != null && agent.isOnNavMesh)
         {
-            // APPLY THE RANDOM MODIFIER HERE
             agent.speed = moveSpeed * movementSpeedMultiplier * currentRandomSpeedModifier;
             
             bool shouldMove = canMove && !isFrozen && !isDying;
@@ -132,10 +129,9 @@ public class Enemy : GazeInteractable
             GameObject picked = TeleportToValidRoom(new string[] { spawnTagStage2 });
             if (picked != null) currentSpawnName = picked.name;
             
-            // Randomize speed for Stage 2
             RandomizeSpeed(2);
         }
-        else if (gazeHits == 2)
+        else if (gazeHits == 2) // STAGE 3 TRIGGER
         {
             GameObject picked = TeleportToValidRoom(new string[] { spawnTagStage3 });
             if (picked != null)
@@ -144,7 +140,9 @@ public class Enemy : GazeInteractable
                 if (picked.CompareTag(spawnTagStage3)) target = Camera.main != null ? Camera.main.transform : target;
             }
             
-            // Randomize speed for Stage 3 (Cap at 7%)
+            // NEW: Apply the scary materials immediately!
+            ApplyStage3Materials();
+            
             RandomizeSpeed(3);
         }
 
@@ -156,20 +154,33 @@ public class Enemy : GazeInteractable
     }
 
     // ==========================================
-    // NEW: SPEED RANDOMIZER
+    // NEW: MATERIAL SWAPPER
     // ==========================================
+    private void ApplyStage3Materials()
+    {
+        if (stage3Materials == null || stage3Materials.Length == 0) return;
+
+        // Go through all 3 poses
+        foreach (var pose in angelPoses)
+        {
+            if (pose == null) continue;
+
+            // Find the Mesh Renderer for this specific pose
+            Renderer[] renderers = pose.GetComponentsInChildren<Renderer>(true);
+            foreach (var r in renderers)
+            {
+                // Swap the old materials out for the new Stage 3 materials
+                r.materials = stage3Materials;
+            }
+        }
+    }
+
     private void RandomizeSpeed(int stage)
     {
         if (stage == 3)
-        {
-            // Stage 3: Between 5% slower (0.95) and 7% faster (1.07)
             currentRandomSpeedModifier = Random.Range(0.95f, 1.07f);
-        }
         else
-        {
-            // Stage 1 & 2: Between 5% slower (0.95) and 15% faster (1.15)
             currentRandomSpeedModifier = Random.Range(0.95f, 1.15f);
-        }
     }
 
     private IEnumerator EnableMovementAfterDelay()
