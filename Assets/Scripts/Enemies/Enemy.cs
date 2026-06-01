@@ -10,9 +10,9 @@ using Random = UnityEngine.Random;
 public class Enemy : GazeInteractable
 {
     [Header("Movement")]
-    public float moveSpeed = 2.1f; 
-    public float movementSpeedMultiplier = 0.5f;
-    public Transform target;
+    public float moveSpeed = 2.4f; 
+    public float movementSpeedMultiplier = 0.8f;
+    public Transform target;    
     public Vector2 startDelayRange = new Vector2(1.5f, 3.0f);
 
     [Header("Respawn")]
@@ -189,9 +189,9 @@ public class Enemy : GazeInteractable
     private void RandomizeSpeed(int stage)
     {
         if (stage == 3)
-            currentRandomSpeedModifier = Random.Range(0.95f, 1.07f);
+            currentRandomSpeedModifier = Random.Range(0.95f, 1.40f);
         else
-            currentRandomSpeedModifier = Random.Range(0.95f, 1.15f);
+            currentRandomSpeedModifier = Random.Range(0.95f, 1.70f);
     }
 
     private IEnumerator EnableMovementAfterDelay()
