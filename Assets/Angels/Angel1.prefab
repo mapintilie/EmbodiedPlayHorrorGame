@@ -192,6 +192,10 @@ MonoBehaviour:
   - {fileID: 7570089924840396882}
   - {fileID: 5623879023645397911}
   - {fileID: 3151089389826585280}
+  stage3Materials:
+  - {fileID: 2100000, guid: 42ae1bbfe8062744dbdc0cab3857189b, type: 2}
+  - {fileID: 2100000, guid: 6bdf671dc296639499ee1c590c073829, type: 2}
+  - {fileID: 2100000, guid: 06d0cf3eeee2c6c4d94b4048e777b678, type: 2}
 --- !u!82 &1216378936030051169
 AudioSource:
   m_ObjectHideFlags: 0
@@ -354,8 +358,8 @@ MeshRenderer:
   m_RendererPriority: 0
   m_Materials:
   - {fileID: 2100000, guid: 99c5a4592fac445419d8d343e6569a1b, type: 2}
-  - {fileID: 2100000, guid: 60dee983bca018a49b467adad8f289a6, type: 2}
-  - {fileID: 2100000, guid: cb4507f29dbbe6a4c82a85c55da11843, type: 2}
+  - {fileID: 2100000, guid: 42ae1bbfe8062744dbdc0cab3857189b, type: 2}
+  - {fileID: 2100000, guid: 6bdf671dc296639499ee1c590c073829, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -443,7 +447,7 @@ MeshRenderer:
   m_Materials:
   - {fileID: 2100000, guid: 99c5a4592fac445419d8d343e6569a1b, type: 2}
   - {fileID: 2100000, guid: 60dee983bca018a49b467adad8f289a6, type: 2}
-  - {fileID: 2100000, guid: cb4507f29dbbe6a4c82a85c55da11843, type: 2}
+  - {fileID: 2100000, guid: 6bdf671dc296639499ee1c590c073829, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0

@@ -312,6 +312,8 @@ MonoBehaviour:
   pauseTimeOnGameOver: 1
   hintText: {fileID: 0}
   myFont: {fileID: 12800000, guid: 3357e61b860cadf47977e1dd64033c6b, type: 3}
+  jumpscareDuration: 1.5
+  youDiedScreenDuration: 2
 --- !u!1 &137676345
 GameObject:
   m_ObjectHideFlags: 0
@@ -2226,8 +2228,8 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4294967295
-  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
+    rgba: 4278387376
+  m_fontColor: {r: 0.69182384, g: 0.0065265317, b: 0.01334633, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:

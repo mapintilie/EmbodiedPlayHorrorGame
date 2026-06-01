@@ -1,11 +1,10 @@
-// csharp
 using UnityEngine;
 using UnityEngine.UI;
 using System.Globalization;
+using System.Collections; // WICHTIG für den Jumpscare-Timer
 
 [RequireComponent(typeof(Collider))]
 public class GameOverManager : MonoBehaviour
-
 {
     public static GameOverManager Instance { get; private set; }
 
@@ -15,10 +14,16 @@ public class GameOverManager : MonoBehaviour
     [Tooltip("Optional: Referenz auf das UI-Text Element named 'Hinweistext'. Falls leer, wird GameObject.Find versucht.")]
     public Text hintText;
     public Font myFont;
+    
+    [Tooltip("Wie lange der Spieler in das Gesicht des Engels starren muss, bevor der 'You Died'-Text kommt.")]
+    public float jumpscareDuration = 1.5f;
+
+    [Tooltip("Wie lange der 'You Died'-Text alleine stehen bleibt, bevor die Statistiken eingeblendet werden.")]
+    public float youDiedScreenDuration = 2.0f;
+
     private bool gameOverTriggered = false;
     private int destroyedCount = 0;
     private float startRealtime = 0f;
-
 
     private void Awake()
     {
@@ -28,11 +33,10 @@ public class GameOverManager : MonoBehaviour
 
         var col = GetComponent<Collider>();
         if (col == null)
-            Debug.LogWarning("GameOverManager: kein Collider vorhanden. Attach an Player Collider or call GameOverManager.ReportCollision manually.");
+            Debug.LogWarning("GameOverManager: kein Collider vorhanden.");
         else
             col.isTrigger = true;
 
-        // Wenn im Inspector nichts gesetzt wurde, versuche das Element per Name zu finden.
         if (hintText == null)
         {
             var go = GameObject.Find("Hinweistext");
@@ -40,38 +44,28 @@ public class GameOverManager : MonoBehaviour
                 hintText = go.GetComponent<Text>();
         }
 
-        // Stelle sicher, dass das Hinweistext-Element standardmäßig verborgen ist.
         if (hintText != null)
             hintText.gameObject.SetActive(false);
     }
 
-    // Aufruf durch EnemySpawner wenn ein Enemy gestorben ist
     public void OnEnemyDestroyed()
     {
         destroyedCount++;
     }
 
-    // Attach an das Player-Collider-GameObject.
     private void OnTriggerEnter(Collider other)
     {
-        Debug.Log($"GameOverManager: OnTriggerEnter with {other.name}", this);
         TryTriggerGameOver(other);
     }
 
     private void OnCollisionEnter(Collision collision)
     {
-        Debug.Log($"GameOverManager: OnCollisionEnter with {collision.collider.name}", this);
         TryTriggerGameOver(collision.collider);
     }
 
-    // Statische Hilfsmethode: andere Scripts können Kollisionen melden, falls GameOverManager nicht am Player hängt.
     public static void ReportCollision(Collider other)
     {
-        if (Instance == null)
-        {
-            Debug.LogWarning("GameOverManager.ReportCollision called but no Instance present.");
-            return;
-        }
+        if (Instance == null) return;
         Instance.TryTriggerGameOver(other);
     }
 
@@ -80,9 +74,7 @@ public class GameOverManager : MonoBehaviour
         if (gameOverTriggered) return;
         if (other == null) return;
 
-        Enemy enemy = null;
-
-        enemy = other.GetComponent<Enemy>();
+        Enemy enemy = other.GetComponent<Enemy>();
         if (enemy == null) enemy = other.GetComponentInParent<Enemy>();
         if (enemy == null) enemy = other.GetComponentInChildren<Enemy>();
 
@@ -92,29 +84,63 @@ public class GameOverManager : MonoBehaviour
         if (enemy == null && other.transform != null)
             enemy = other.transform.root.GetComponent<Enemy>();
 
-        if (enemy == null)
-        {
-            Debug.Log($"GameOverManager: Kollidierendes Objekt '{other.name}' ist kein Enemy (keine Enemy-Komponente gefunden).", this);
-            return;
-        }
+        if (enemy == null) return;
 
-        Debug.Log($"GameOverManager: Enemy '{enemy.name}' getroffen -> Game Over auslösen.", this);
-        TriggerGameOver();
+        TriggerGameOver(enemy);
     }
 
-    private void TriggerGameOver()
+    private void TriggerGameOver(Enemy killerEnemy)
     {
         gameOverTriggered = true;
+        StartCoroutine(GameOverSequence(killerEnemy));
+    }
 
+    // =========================================================================
+    // DIE NEUE ZWEISTUFIGE GAME OVER SEQUENZ
+    // =========================================================================
+    private IEnumerator GameOverSequence(Enemy killerEnemy)
+    {
+        // STUFE 1: Jumpscare (Kamera reißt zum Engel)
+        GazeCameraController camController = FindObjectOfType<GazeCameraController>();
+        if (camController != null && killerEnemy != null)
+        {
+            camController.TriggerGameOverSnap(killerEnemy.transform);
+        }
+
+        // Warte während des Jumpscares
+        yield return new WaitForSeconds(jumpscareDuration);
+
+        // STUFE 2: Nur "You Died" anzeigen
+        string initialMessage = "You Died";
+        if (!TryShowHintText(initialMessage))
+        {
+            CreateBlackOverlayWithText(initialMessage);
+        }
+
+        // Warte in der "You Died"-Dunkelheit
+        yield return new WaitForSeconds(youDiedScreenDuration);
+
+        // STUFE 3: Der eigentliche Statistik-Screen (Infos geladen!)
         float elapsed = Time.realtimeSinceStartup - startRealtime;
         string timeStr = FormatTime(elapsed);
+        string detailedMessage = $"Game Over\n\nAngels destroyed: {destroyedCount}\nTime: {timeStr}";
 
-        string message = $"Game Over\n\nAngels destroyed: {destroyedCount}\nTime: {timeStr}";
+        // Text aktualisieren oder neues Overlay drüberlegen
+        if (hintText != null && hintText.gameObject.activeInHierarchy)
+        {
+            hintText.text = detailedMessage;
+        }
+        else
+        {
+            // Wenn das dynamische Canvas genutzt wurde, löschen wir das alte "You Died" 
+            // und spawnen das neue mit den Statistiken
+            GameObject oldCanvas = GameObject.Find("GameOverCanvas");
+            if (oldCanvas != null) Destroy(oldCanvas);
+            
+            CreateBlackOverlayWithText(detailedMessage);
+        }
 
-        // Versuche erstes das vorhandene Hinweistext-Element zu benutzen, ansonsten Fallback auf das Overlay.
-        if (!TryShowHintText(message))
-            CreateBlackOverlayWithText(message);
-
+        // Erst ganz am Ende, wenn alles steht, das Spiel einfrieren
         if (pauseTimeOnGameOver)
             Time.timeScale = 0f;
     }
@@ -127,22 +153,18 @@ public class GameOverManager : MonoBehaviour
         var go = hintText.gameObject;
         go.SetActive(true);
 
-        // Bring das UI-Element in den Vordergrund (Canvas-SortingOrder erhöhen falls vorhanden)
         var canvas = hintText.GetComponentInParent<Canvas>();
-        if (canvas != null)
-            canvas.sortingOrder = 1000;
+        if (canvas != null) canvas.sortingOrder = 1000;
 
-        // Optional: das RectTransform auf Fullscreen stretchen, damit der Text zentral über dem ganzen Bildschirm liegt.
         var rt = hintText.GetComponent<RectTransform>();
         if (rt != null)
         {
-            rt.anchorMin = new Vector2(0f, 0f);
-            rt.anchorMax = new Vector2(1f, 1f);
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
             rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
         }
 
-        // Stelle sicher, dass der Text zentriert und gut lesbar ist
         hintText.alignment = TextAnchor.MiddleCenter;
         hintText.color = Color.white;
 
@@ -192,6 +214,4 @@ public class GameOverManager : MonoBehaviour
         tr.offsetMin = Vector2.zero;
         tr.offsetMax = Vector2.zero;
     }
-    
-    
 }

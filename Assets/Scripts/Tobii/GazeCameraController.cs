@@ -133,4 +133,20 @@ public class GazeCameraController : MonoBehaviour
     {
         // Intentionally left blank!
     }
+    
+    public void TriggerGameOverSnap(Transform killerEnemy)
+    {
+        // 1. Schalte dieses Skript ab! Der Spieler kann sich nicht mehr wegdrehen.
+        this.enabled = false;
+
+        // 2. Berechne die Richtung vom Spieler zum Gegner
+        Vector3 directionToEnemy = killerEnemy.position - transform.position;
+
+        // HACK: Da der "Mittelpunkt" von Unity-Charakteren oft an den Füßen liegt,
+        // addieren wir ein bisschen Höhe, damit die Kamera dem Engel "ins Gesicht" schaut!
+        directionToEnemy.y += 1.3f; // Passe diese Zahl an, wenn die Kamera zu hoch/niedrig schaut
+
+        // 3. Richte die Kamera sofort gnadenlos auf den Gegner aus
+        transform.rotation = Quaternion.LookRotation(directionToEnemy);
+    }
 }

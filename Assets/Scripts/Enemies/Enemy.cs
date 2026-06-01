@@ -30,8 +30,8 @@ public class Enemy : GazeInteractable
     [Tooltip("Drag the 3 Angel child objects here (0=Start, 1=1xHit, 2=2xHit)")]
     public GameObject[] angelPoses;
     
-    [Header("Stage 3 Visuals")]
-    [Tooltip("Drag the new materials for Stage 3 here. If the angel has a Head and Body material, add BOTH here in the exact same order as the original!")]
+    [Header("Death Visuals")]
+    [Tooltip("Materials applied on the 3rd hit (Death). Keep the same order as your normal materials!")]
     public Material[] stage3Materials;
 
     private bool canMove;
@@ -131,7 +131,7 @@ public class Enemy : GazeInteractable
             
             RandomizeSpeed(2);
         }
-        else if (gazeHits == 2) // STAGE 3 TRIGGER
+        else if (gazeHits == 2)
         {
             GameObject picked = TeleportToValidRoom(new string[] { spawnTagStage3 });
             if (picked != null)
@@ -140,9 +140,7 @@ public class Enemy : GazeInteractable
                 if (picked.CompareTag(spawnTagStage3)) target = Camera.main != null ? Camera.main.transform : target;
             }
             
-            // NEW: Apply the scary materials immediately!
-            ApplyStage3Materials();
-            
+            // REMOVED the material swap from here!
             RandomizeSpeed(3);
         }
 
@@ -153,23 +151,36 @@ public class Enemy : GazeInteractable
         canBeLookedAt = true;
     }
 
-    // ==========================================
-    // NEW: MATERIAL SWAPPER
-    // ==========================================
-    private void ApplyStage3Materials()
+    private IEnumerator DieSequence()
+    {
+        isFrozen = true;
+        isDying = true;
+        if (agent != null && agent.isOnNavMesh) agent.isStopped = true;
+
+        yield return new WaitForSeconds(freezeDuration);
+
+        // NEW: Apply the scary materials on the 3rd hit (replaces the old black color code)
+        ApplyDeathMaterials();
+
+        // NOTE: Change this 0.2f to a larger number (like 1.5f) if you want the player 
+        // to actually see the scary death materials before the enemy is destroyed!
+        yield return new WaitForSeconds(0.3f);
+
+        Spawner?.NotifyEnemyDied(this);
+        Destroy(gameObject);
+    }
+
+    private void ApplyDeathMaterials()
     {
         if (stage3Materials == null || stage3Materials.Length == 0) return;
 
-        // Go through all 3 poses
         foreach (var pose in angelPoses)
         {
             if (pose == null) continue;
 
-            // Find the Mesh Renderer for this specific pose
             Renderer[] renderers = pose.GetComponentsInChildren<Renderer>(true);
             foreach (var r in renderers)
             {
-                // Swap the old materials out for the new Stage 3 materials
                 r.materials = stage3Materials;
             }
         }
@@ -188,26 +199,6 @@ public class Enemy : GazeInteractable
         float delay = Random.Range(startDelayRange.x, startDelayRange.y);
         yield return new WaitForSeconds(delay);
         canMove = true;
-    }
-
-    private IEnumerator DieSequence()
-    {
-        isFrozen = true;
-        isDying = true;
-        if (agent != null && agent.isOnNavMesh) agent.isStopped = true;
-
-        yield return new WaitForSeconds(freezeDuration);
-
-        if (cachedRenderers != null)
-        {
-            foreach (var r in cachedRenderers)
-                if (r != null) r.material.color = Color.black;
-        }
-
-        yield return new WaitForSeconds(0.2f);
-
-        Spawner?.NotifyEnemyDied(this);
-        Destroy(gameObject);
     }
 
     private Transform GetMoveTarget()
