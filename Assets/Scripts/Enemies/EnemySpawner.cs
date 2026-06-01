@@ -26,9 +26,9 @@ public class EnemySpawner : MonoBehaviour
 
     private int totalKills = 0;
     private int enemiesUntilNextBonus = 5; 
-
-    // --- DIAGNOSTIC VARIABLE ---
-    private string lastError = "Waiting to start...";
+    
+    // NEU: Speichert das aktuell ausgewürfelte Limit für normale Runden
+    private int currentNormalCap = 2; 
 
     private void Start()
     {
@@ -49,8 +49,6 @@ public class EnemySpawner : MonoBehaviour
             return;
         }
 
-        // THE GHOST KILLER: 
-        // This now strictly removes enemies if they are destroyed OR if another script disabled them!
         activeEnemies.RemoveAll(item => item == null || item.gameObject == null || !item.gameObject.activeInHierarchy);
 
         if (activeEnemies.Count < GetCurrentAllowedMax())
@@ -64,7 +62,6 @@ public class EnemySpawner : MonoBehaviour
         }
         else
         {
-            // Keep timer frozen so it doesn't instantly spawn when an enemy dies
             SetNextSpawnDelay();
         }
     }
@@ -81,16 +78,28 @@ public class EnemySpawner : MonoBehaviour
         {
             enemiesUntilNextBonus = Random.Range(5, 11); 
         }
+
+        // NEU: Nach jedem Kill würfeln wir neu aus, ob die nächste "Phase" entspannt (1) oder schwer (2) wird.
+        // 40% Chance auf nur 1 Gegner. 60% Chance auf 2 Gegner.
+        if (Random.value < 0.40f)
+        {
+            currentNormalCap = 1;
+        }
+        else
+        {
+            currentNormalCap = 2;
+        }
     }
 
     private int GetCurrentAllowedMax()
     {
         if (totalKills < 2) return 1;
         
-        int allowedMax = 2;
-        if (enemiesUntilNextBonus == 0) allowedMax = 3;
+        // "unless there is already 3" -> Bonuswelle (3) wird NIEMALS von der 40%-Chance überschrieben!
+        if (enemiesUntilNextBonus == 0) return 3; 
 
-        return Mathf.Clamp(allowedMax, 1, maxConcurrentEnemies);
+        // Ansonsten geben wir das Limit zurück, das beim letzten Kill ausgewürfelt wurde
+        return Mathf.Clamp(currentNormalCap, 1, maxConcurrentEnemies);
     }
 
     private void SetNextSpawnDelay()
@@ -102,8 +111,8 @@ public class EnemySpawner : MonoBehaviour
 
     private void SpawnEnemy()
     {
-        if (enemyPrefab == null) { lastError = "ERROR: No Prefab assigned!"; return; }
-        if (activeEnemies.Count >= GetCurrentAllowedMax()) { lastError = "Limit Reached"; return; }
+        if (enemyPrefab == null) return;
+        if (activeEnemies.Count >= GetCurrentAllowedMax()) return;
 
         var spawners = GameObject.FindGameObjectsWithTag("Spawners1");
         List<Transform> validSpawners = new List<Transform>();
@@ -137,18 +146,9 @@ public class EnemySpawner : MonoBehaviour
             {
                 spawned.Spawner = this;
                 activeEnemies.Add(spawned);
-                lastError = "Spawn Successful";
-            }
-            else
-            {
-                lastError = "ERROR: Prefab is missing the Enemy script!";
             }
 
             if (spawnAudiosource != null) spawnAudiosource.Play();
-        }
-        else
-        {
-            lastError = "ERROR: Absolutely no spawn points found!";
         }
     }
 
@@ -170,34 +170,5 @@ public class EnemySpawner : MonoBehaviour
                 return false; 
         }
         return true;
-    }
-
-    // ==========================================
-    // THE X-RAY OVERLAY
-    // ==========================================
-    private void OnGUI()
-    {
-        GUI.Box(new Rect(10, 10, 450, 250), "");
-        GUILayout.BeginArea(new Rect(20, 20, 430, 230));
-        
-        GUILayout.Label($"<color=yellow><size=16><b>SPAWNER DIAGNOSTICS</b></size></color>");
-        GUILayout.Label($"Game Started: {gameHasStarted}");
-        GUILayout.Label($"Total Kills: {totalKills}");
-        GUILayout.Label($"Active Limit: {GetCurrentAllowedMax()} (Next 3-Enemy wave in {enemiesUntilNextBonus} kills)");
-        GUILayout.Label($"Timer until next spawn: {Mathf.Max(0, spawnTimer):F1}s");
-        GUILayout.Label($"Last Spawner Status: <color=cyan>{lastError}</color>");
-        GUILayout.Space(10);
-        
-        GUILayout.Label($"<b>Active Enemies in memory: {activeEnemies.Count}</b>");
-        for (int i = 0; i < activeEnemies.Count; i++)
-        {
-            if (activeEnemies[i] != null)
-            {
-                Vector3 pos = activeEnemies[i].transform.position;
-                GUILayout.Label($"- Enemy {i}: Pos({pos.x:F1}, {pos.y:F1}, {pos.z:F1}) | Active: {activeEnemies[i].gameObject.activeInHierarchy}");
-            }
-        }
-        
-        GUILayout.EndArea();
     }
 }
